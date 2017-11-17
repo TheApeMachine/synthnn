@@ -5,11 +5,14 @@ import matplotlib.animation as animation
 class SynthNN:
 
     def __init__(self):
+        with open('./data/common-sense.txt') as f:
+            content = f.readlines()
+
         self.neurons  = np.array([0.0, 1.0, 2.0])
         self.fig      = plt.figure()
         self.ax1      = self.fig.add_subplot(1, 1, 1)
-        self.data     = ['t', 'h', 'i', 's', ' ', 'i', 's', ' ', 'a', ' ', 't', 'e', 's', 't']
-        self.memories = []
+        self.data     = [list(x.strip()) for x in content]
+        self.data     = [item for sublist in self.data for item in sublist]
 
     def plot(self):
         ani = animation.FuncAnimation(self.fig, self.animate, interval=1)
@@ -27,7 +30,3 @@ class SynthNN:
         self.ax1.plot(x, y)
 
         self.fig.suptitle('NO CURRENT THOUGHT', fontsize=10, fontweight='bold')
-
-    def set_memory(self, x, y, z):
-        self.memories.append([x, y, z])
-        print self.memories
