@@ -1,32 +1,88 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from plotter import Plotter, Axis
+from layer import Layer
+import random
+
+class Data:
+
+    def __init__(self):
+        # We are going to train numbers to letters,
+        # so we can just use the index of the array here
+        # as the key of the label.
+        self.labels = [
+            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'
+        ]
+
+        # Give me a bunch of random numbers between 0 and 9.
+        self.train = [random.randint(0, 9) for _ in range(1000)]
+        self.test  = [random.randint(0, 9) for _ in range(100)]
 
 class SynthNN:
 
     def __init__(self):
-        with open('./data/common-sense.txt') as f:
-            content = f.readlines()
+        # Get the data.
+        self.data = Data()
 
-        self.neurons  = np.array([0.0, 1.0, 2.0])
-        self.fig      = plt.figure()
-        self.ax1      = self.fig.add_subplot(1, 1, 1)
-        self.data     = [list(x.strip()) for x in content]
-        self.data     = [item for sublist in self.data for item in sublist]
+        # Setup a plotter we can use to visualize output.
+        self.plotter = Plotter()
 
-    def plot(self):
-        ani = animation.FuncAnimation(self.fig, self.animate, interval=1)
-        plt.show()
+        # Make sure you scale in some way from the size of the
+        # input vector, to the size of the label vector.
+        self.layers = [
+            Layer(1),
+            Layer(5),
+            Layer(10)
+        ]
+
+        # Add a couple of axes on the plotter so we can debug
+        # individual node states.
+        #for layer in self.layers:
+        #    for node in layer.nodes:
+        #        ax = Axis(self.plotter, node)
+        #        ax.plot()
+
+        ax = Axis(self.plotter, self.layers[0].nodes[0])
+        ax.plot()
+
+    def run(self):
+        ani = animation.FuncAnimation(
+            self.plotter.fig, self.animate, interval=1
+        )
+
+        self.plotter.show()
 
     def animate(self, i):
-        frame  = ord(self.data[(i - 1) % len(self.data)]) / 100.0
-        Fs     = 64
-        f      = 1
-        sample = 64
-        x      = np.arange(sample)
-        y      = np.sin(i + 2 * np.pi * frame * x / Fs)
+        if len(self.data.train) > 0:
+            train = self.data.train.pop()
 
-        self.ax1.clear()
-        self.ax1.plot(x, y)
+            for lidx in range(len(self.layers)):
+                if lidx == 0:
+                    self.layers[lidx].nodes[0].x = train
+                else:
+                    self.layers[lidx].feed(self.layers[lidx - 1])
 
-        self.fig.suptitle('NO CURRENT THOUGHT', fontsize=10, fontweight='bold')
+                self.layers[lidx].tick(i)
+
+            val   = 0
+            cnode = 0
+            count = 0
+
+            for node in self.layers[-1].nodes:
+                print(node.y)
+                if node.y > val:
+                    cnode = count
+                    val   = node.y
+
+                count += 1
+
+            if train != cnode:
+                # Error in prediction.
+                pass
+
+            self.plotter.tick(
+                [train, self.data.labels[cnode]]
+            )
+
+        #if i > 0:
+            #quit()
