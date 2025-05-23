@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from collections import deque
 import json
+import time
 
 from adaptive import AdaptiveModalNetwork
 from hierarchical_modal import HierarchicalModalProcessor
 from context_aware_detector import ContextAwareModeDetector
-from abstract import ResonantNetwork
+from synthnn.core import AcceleratedMusicalNetwork, ResonantNode
 
 
 class ModalMusicGenerator:
@@ -23,10 +24,14 @@ class ModalMusicGenerator:
         # Core components
         self.context_detector = ContextAwareModeDetector(context_window=20)
         self.hierarchical_processor = HierarchicalModalProcessor(
-            time_scales=[0.25, 1.0, 4.0],  # Note, phrase, section levels
-            num_nodes=7
+            time_scales=[0.25, 1.0, 4.0],  # Short, medium, long term focus in seconds
+            num_nodes=5, # Nodes per adaptive network within each scale of HMP
+            base_process_sample_rate=self.sample_rate
         )
-        self.adaptive_network = AdaptiveModalNetwork(num_nodes_per_network=7)
+        self.adaptive_network = AdaptiveModalNetwork(
+            num_nodes_per_network=7, # Nodes per modal network within AdaptiveModalNetwork
+            initial_base_freq=base_freq
+        ) 
         
         # Generation parameters
         self.current_mode = 'Ionian'
@@ -63,15 +68,16 @@ class ModalMusicGenerator:
             structure,
             self.tempo
         )
+        self.generation_history['structure'] = structure_plan # Store for plotting
         
         # Initialize output
         total_samples = int(duration_seconds * self.sample_rate)
         composition = np.zeros(total_samples)
         
-        current_sample = 0
+        current_sample_pos = 0 # Renamed to avoid conflict
         
         for section in structure_plan:
-            print(f"Generating {section['name']} section...")
+            print(f"Generating {section['name']} section (Mode: {self.current_mode})...")
             
             # Generate section with appropriate context
             section_audio = self._generate_section(
@@ -88,9 +94,9 @@ class ModalMusicGenerator:
             )
             
             # Add to composition
-            end_sample = min(current_sample + len(section_audio), total_samples)
-            composition[current_sample:end_sample] = section_audio[:end_sample-current_sample]
-            current_sample = end_sample
+            end_sample = min(current_sample_pos + len(section_audio), total_samples)
+            composition[current_sample_pos:end_sample] = section_audio[:end_sample-current_sample_pos]
+            current_sample_pos = end_sample
             
         # Apply final mastering
         composition = self._master_audio(composition)
@@ -103,72 +109,115 @@ class ModalMusicGenerator:
         section_audio = np.zeros(samples_needed)
         
         # Determine initial mode based on section type and position
-        structural_hints = {
-            'section': section_type,
-            'position': position
-        }
+        # structural_hints = {
+        #     'section': section_type,
+        #     'position': position
+        # }
         
         # Generate phrases
         phrase_duration = 4 * self.beat_duration  # 4-beat phrases
-        phrase_samples = int(phrase_duration * self.sample_rate)
+        # phrase_samples = int(phrase_duration * self.sample_rate)
         
         current_pos = 0
         phrase_count = 0
-        
+        last_phrase_hierarchical_analysis = None # Store HMP output from previous phrase
+
         while current_pos < samples_needed:
+            phrase_samples = int(min(phrase_duration, duration - (current_pos/self.sample_rate)) * self.sample_rate)
+            if phrase_samples <= 0: break
+
             # Update context for phrase generation
-            phrase_position = current_pos / samples_needed
+            phrase_position_in_section = current_pos / samples_needed if samples_needed > 0 else 0
             
             # Generate phrase
             phrase_audio, phrase_mode = self._generate_phrase(
-                phrase_duration,
+                phrase_duration, # Target duration for phrase logic
                 section_type,
-                phrase_position,
+                phrase_position_in_section,
                 semantic_tags,
-                phrase_count
+                phrase_count,
+                last_phrase_hierarchical_analysis # Pass HMP analysis to influence next phrase
             )
+
+            # Ensure phrase_audio is not longer than remaining space in section_audio
+            actual_phrase_len = min(len(phrase_audio), samples_needed - current_pos)
+            phrase_audio_segment = phrase_audio[:actual_phrase_len]
             
-            # Blend with previous phrase for smooth transitions
-            if current_pos > 0:
+            # Blend with previous phrase for smooth transitions (if not first phrase)
+            if current_pos > 0 and phrase_count > 0:
                 overlap_samples = int(0.1 * self.sample_rate)  # 100ms overlap
-                if current_pos >= overlap_samples:
-                    # Crossfade
-                    fade_in = np.linspace(0, 1, overlap_samples)
-                    fade_out = np.linspace(1, 0, overlap_samples)
-                    
-                    section_audio[current_pos-overlap_samples:current_pos] *= fade_out
-                    section_audio[current_pos-overlap_samples:current_pos] += phrase_audio[:overlap_samples] * fade_in
-                    
-                    # Add rest of phrase
-                    end_pos = min(current_pos + len(phrase_audio) - overlap_samples, samples_needed)
-                    section_audio[current_pos:end_pos] = phrase_audio[overlap_samples:end_pos-current_pos+overlap_samples]
-                else:
-                    end_pos = min(current_pos + len(phrase_audio), samples_needed)
-                    section_audio[current_pos:end_pos] = phrase_audio[:end_pos-current_pos]
+                overlap_samples = min(overlap_samples, actual_phrase_len, current_pos)
+
+                fade_in = np.linspace(0, 1, overlap_samples)
+                fade_out = np.linspace(1, 0, overlap_samples)
+                
+                # Apply crossfade to the end of the previous audio and start of new audio
+                section_audio[current_pos-overlap_samples:current_pos] *= fade_out
+                section_audio[current_pos-overlap_samples:current_pos] += phrase_audio_segment[:overlap_samples] * fade_in
+                
+                # Add rest of the new phrase segment
+                section_audio[current_pos:current_pos + actual_phrase_len - overlap_samples] = phrase_audio_segment[overlap_samples:]
+                current_pos += actual_phrase_len - overlap_samples
             else:
-                end_pos = min(current_pos + len(phrase_audio), samples_needed)
-                section_audio[current_pos:end_pos] = phrase_audio[:end_pos-current_pos]
+                section_audio[current_pos:current_pos + actual_phrase_len] = phrase_audio_segment
+                current_pos += actual_phrase_len
             
-            current_pos = end_pos
+            # Process the *generated* phrase_audio_segment with HMP for the *next* iteration
+            if self.hierarchical_processor and phrase_audio_segment.any():
+                print(f"Hierarchically analyzing phrase {phrase_count} (mode: {phrase_mode}) output...")
+                # HMP processes in chunks, so we might feed the whole phrase segment
+                # or iterate through it in chunks if it's very long.
+                # For simplicity, let's process the whole generated phrase segment at once if it's not too large.
+                # This might require HMP to handle variable length inputs or for us to chunk it here.
+                # HMP's process_signal_chunk expects a chunk.
+                hmp_chunk_size = int(0.1 * self.sample_rate) # Example HMP processing chunk size
+                if len(phrase_audio_segment) > hmp_chunk_size:
+                    temp_hmp_results = []
+                    for i in range(0, len(phrase_audio_segment) - hmp_chunk_size + 1, hmp_chunk_size):
+                        hmp_chunk = phrase_audio_segment[i:i+hmp_chunk_size]
+                        if hmp_chunk.any():
+                             temp_hmp_results.append(self.hierarchical_processor.process_signal_chunk(hmp_chunk, self.sample_rate))
+                    # We need to decide how to consolidate multiple HMP results for one phrase
+                    # For now, let's take the last one, or average properties if available
+                    if temp_hmp_results:
+                        last_phrase_hierarchical_analysis = temp_hmp_results[-1]
+                elif phrase_audio_segment.any():
+                    last_phrase_hierarchical_analysis = self.hierarchical_processor.process_signal_chunk(phrase_audio_segment, self.sample_rate)
+                else:
+                    last_phrase_hierarchical_analysis = None
+
             phrase_count += 1
-            
-            # Update generation history
             self.generation_history['modes'].append(phrase_mode)
+            
+            if current_pos >= samples_needed: break
         
         return section_audio
     
-    def _generate_phrase(self, duration, section_type, position, semantic_tags, phrase_index):
-        """Generate a musical phrase using modal networks"""
+    def _generate_phrase(self, duration, section_type, position_in_section, semantic_tags, phrase_index, hierarchical_context=None):
+        """Generate a musical phrase using modal networks, influenced by hierarchical context."""
         # Determine mode for this phrase
         if phrase_index == 0 or np.random.random() < 0.3:  # Mode change probability
-            # Get intelligent mode suggestion
             test_signal = self._create_test_signal(self.current_mode)
             
+            # Augment semantic_tags or structural_hints with hierarchical_context if available
+            current_semantic_tags = list(semantic_tags) # Make a copy
+            if hierarchical_context and hierarchical_context.get('fused_output'):
+                # Example: Convert fused features from HMP into descriptive tags
+                fused_features = hierarchical_context['fused_output'].get('fused_features', [])
+                if len(fused_features) > 0:
+                    if np.argmax(fused_features) < len(fused_features) / 2:
+                        current_semantic_tags.append("hmp_stable") # Example tag
+                    else:
+                        current_semantic_tags.append("hmp_complex") # Example tag
+            if hierarchical_context and hierarchical_context.get('temporal_coherence'):
+                if hierarchical_context['temporal_coherence'].get('mode_alignment') == True:
+                    current_semantic_tags.append("hmp_aligned")
+
             suggested_mode = self.context_detector.analyze_with_context(
                 test_signal,
                 self.sample_rate,
-                semantic_tags=semantic_tags,
-                structural_hints={'section': section_type, 'position': position}
+                semantic_tags=current_semantic_tags,
+                structural_hints={'section': section_type, 'position': position_in_section}
             )
             
             # Consider mode transition path
@@ -198,7 +247,7 @@ class ModalMusicGenerator:
         rhythm_pattern = self.rhythm_generator.generate_pattern(
             duration,
             section_type,
-            complexity=0.5 + 0.3 * position  # Increase complexity over time
+            complexity=0.5 + 0.3 * position_in_section  # Increase complexity over time
         )
         
         # Convert to audio using resonant networks
@@ -212,85 +261,109 @@ class ModalMusicGenerator:
         return phrase_audio, self.current_mode
     
     def _render_phrase(self, melody_contour, rhythm_pattern, mode, duration):
-        """Render a phrase using the resonant networks"""
+        """Render a phrase using the new AcceleratedMusicalNetwork."""
         samples = int(duration * self.sample_rate)
-        audio = np.zeros(samples)
+        audio_output = np.zeros(samples) # Changed variable name
         
-        # Get mode intervals
         mode_intervals = self.context_detector.mode_intervals[mode]
         
-        # Create resonant network for this mode
-        mode_network = ResonantNetwork(
-            num_nodes=len(mode_intervals),
+        # Create and configure the accelerated musical network for this phrase
+        phrase_network = AcceleratedMusicalNetwork(
+            name=f"phrase_render_{mode}_{int(time.time())}", # Unique name
             base_freq=self.base_freq,
-            harmonic_ratios=mode_intervals,
-            target_phase=0,
-            target_amplitude=0.5
+            mode=mode,
+            mode_detector=self.context_detector 
         )
+        initial_amplitude_per_node = 0.5 / np.sqrt(len(mode_intervals)) if mode_intervals else 0.5
+        phrase_network.create_harmonic_nodes(mode_intervals, amplitude=initial_amplitude_per_node)
         
-        # Render each note
-        note_index = 0
-        current_sample = 0
+        if len(phrase_network.nodes) > 1:
+             phrase_network.create_modal_connections(connection_pattern="nearest_neighbor", weight_scale=0.3)
+             phrase_network.coupling_strength = 0.1 
+             phrase_network.global_damping = 0.05
+
+        current_sample_idx = 0
         
         for i, (note_degree, duration_beats) in enumerate(zip(melody_contour, rhythm_pattern)):
-            note_duration = duration_beats * self.beat_duration
-            note_samples = int(note_duration * self.sample_rate)
+            note_duration_sec = duration_beats * self.beat_duration
+            note_samples_count = int(note_duration_sec * self.sample_rate)
             
-            if note_degree > 0:  # Not a rest
-                # Calculate frequency based on mode degree
+            if note_samples_count == 0: continue
+
+            segment_audio = np.zeros(note_samples_count)
+
+            if note_degree > 0:  
+                target_freq_ratio = 1.0
                 if note_degree <= len(mode_intervals):
-                    freq_ratio = mode_intervals[note_degree - 1]
-                else:
-                    # Wrap around for extended range
+                    target_freq_ratio = mode_intervals[note_degree - 1]
+                else: 
                     octave = (note_degree - 1) // len(mode_intervals)
                     degree_in_octave = (note_degree - 1) % len(mode_intervals)
-                    freq_ratio = mode_intervals[degree_in_octave] * (2 ** octave)
+                    target_freq_ratio = mode_intervals[degree_in_octave] * (2 ** octave)
                 
-                note_freq = self.base_freq * freq_ratio
+                target_note_freq = self.base_freq * target_freq_ratio
+
+                original_amplitudes = {}
+                for node_id, node in phrase_network.nodes.items():
+                    original_amplitudes[node_id] = node.amplitude
+                    if abs(node.frequency - target_note_freq) < (target_note_freq * 0.1): 
+                        node.amplitude = 1.0 
+                    elif abs(node.frequency - target_note_freq/2) < (target_note_freq * 0.05) or \
+                         abs(node.frequency - target_note_freq*2) < (target_note_freq * 0.05): 
+                         node.amplitude *= 1.5 
+                    else:
+                        node.amplitude *= 0.3 
+
+                segment_audio = phrase_network.generate_audio_accelerated(
+                    note_duration_sec, self.sample_rate
+                )
                 
-                # Generate note using resonant synthesis
-                t = np.linspace(0, note_duration, note_samples)
-                
-                # Create rich harmonic content
-                note_audio = np.zeros(note_samples)
-                
-                # Fundamental
-                note_audio += 0.6 * np.sin(2 * np.pi * note_freq * t)
-                
-                # Add harmonics based on mode character
-                if mode in ['Ionian', 'Lydian']:  # Bright modes
-                    note_audio += 0.2 * np.sin(2 * np.pi * note_freq * 2 * t)
-                    note_audio += 0.1 * np.sin(2 * np.pi * note_freq * 3 * t)
-                elif mode in ['Phrygian', 'Locrian']:  # Dark modes
-                    note_audio += 0.15 * np.sin(2 * np.pi * note_freq * 1.5 * t)
-                    note_audio += 0.1 * np.sin(2 * np.pi * note_freq * 2.5 * t)
-                else:  # Neutral modes
-                    note_audio += 0.15 * np.sin(2 * np.pi * note_freq * 2 * t)
-                    note_audio += 0.1 * np.sin(2 * np.pi * note_freq * 4 * t)
-                
-                # Apply envelope
-                envelope = self._create_envelope(note_samples, note_duration)
-                note_audio *= envelope
-                
-                # Add to output
-                end_sample = min(current_sample + note_samples, samples)
-                audio[current_sample:end_sample] = note_audio[:end_sample-current_sample]
+                envelope = self._create_envelope(note_samples_count, note_duration_sec)
+                if len(segment_audio) == len(envelope): 
+                    segment_audio *= envelope
+                else: 
+                    segment_audio = segment_audio[:min(len(segment_audio), len(envelope))] * envelope[:min(len(segment_audio), len(envelope))]
+
+                for node_id, node in phrase_network.nodes.items():
+                    node.amplitude = (original_amplitudes[node_id] * 0.7) + (node.amplitude * 0.3)
+
+            end_sample_idx = min(current_sample_idx + note_samples_count, samples)
+            audio_output[current_sample_idx:end_sample_idx] = segment_audio[:end_sample_idx-current_sample_idx]
             
-            current_sample += note_samples
-            if current_sample >= samples:
+            current_sample_idx += note_samples_count
+            if current_sample_idx >= samples:
                 break
         
-        # Process through adaptive network for modal coherence
-        audio_processed = np.zeros_like(audio)
-        chunk_size = 1024
-        
-        for i in range(0, len(audio) - chunk_size, chunk_size):
-            chunk = audio[i:i+chunk_size]
-            processed_value = self.adaptive_network.process(chunk, self.sample_rate)
-            # Use processed value to modulate the chunk
-            audio_processed[i:i+chunk_size] = chunk * (0.8 + 0.2 * np.tanh(processed_value))
-        
-        return audio_processed
+        # Process with refactored AdaptiveModalNetwork
+        if hasattr(self, 'adaptive_network') and self.adaptive_network is not None:
+            print(f"Applying adaptive processing to phrase (mode: {mode})...")
+            audio_processed = np.zeros_like(audio_output)
+            chunk_size = 1024 # Process in chunks
+            num_chunks = (len(audio_output) - 1) // chunk_size + 1
+
+            for i in range(num_chunks):
+                start_idx = i * chunk_size
+                end_idx = min((i + 1) * chunk_size, len(audio_output))
+                chunk = audio_output[start_idx:end_idx]
+                
+                if chunk.any(): # Only process if chunk is not all zeros
+                    # The `process` method now returns a scalar modulation factor
+                    modulation_factor = self.adaptive_network.process(chunk, self.sample_rate)
+                    # Apply modulation: tanh for scaling between -1 and 1, then adjust range
+                    # The scalar factor from adaptive_network.process might be, e.g., average amplitude.
+                    # We need to map this to a sensible modulation range (e.g., 0.5 to 1.5)
+                    # Example: scaled_modulation = 0.5 * np.tanh(modulation_factor) + 1.0
+                    # Let's assume modulation_factor is already somewhat scaled, e.g. representing clarity or energy.
+                    # A simpler approach: scale by a factor influenced by the network's output.
+                    # If modulation_factor is an energy-like measure, we want to enhance if high, dampen if low.
+                    # A more direct approach is to scale it to be a gain factor e.g. between 0.7 and 1.3
+                    gain = 1.0 + 0.3 * np.tanh(modulation_factor - np.mean(self.adaptive_network.output_history if self.adaptive_network.output_history else [0]))
+                    audio_processed[start_idx:end_idx] = chunk * gain
+                else:
+                    audio_processed[start_idx:end_idx] = chunk # Keep zero chunks as zero
+            return audio_processed
+        else:
+            return audio_output # Return direct output if no adaptive network
     
     def _create_envelope(self, num_samples, duration):
         """Create an ADSR envelope for a note"""
@@ -598,6 +671,11 @@ class RhythmGenerator:
         }
         
         # Select pattern based on section and complexity
+        # Ensure self.tempo is available or use a default
+        tempo = self.tempo if hasattr(self, 'tempo') else 120
+        beat_duration_val = 60.0 / tempo
+
+
         if section_type == 'intro' or section_type == 'outro':
             pattern_choice = 'sparse'
         elif section_type == 'chorus':
@@ -610,27 +688,25 @@ class RhythmGenerator:
         base_pattern = patterns[pattern_choice]
         
         # Repeat pattern to fill duration
-        total_beats = duration / (60.0 / 120.0)  # Assuming 120 BPM base
+        total_beats = duration / beat_duration_val # Use local beat_duration_val
         rhythm_pattern = []
         
-        while sum(rhythm_pattern) < total_beats:
-            rhythm_pattern.extend(base_pattern)
-        
-        # Trim to exact duration
-        cumsum = 0
-        trimmed_pattern = []
-        for beat in rhythm_pattern:
-            if cumsum + beat <= total_beats:
-                trimmed_pattern.append(beat)
-                cumsum += beat
-            else:
-                # Add partial beat
-                remaining = total_beats - cumsum
-                if remaining > 0.1:
-                    trimmed_pattern.append(remaining)
+        current_beats_sum = 0
+        while current_beats_sum < total_beats:
+            for beat_val in base_pattern: # Iterate through beat_val
+                if current_beats_sum + beat_val <= total_beats:
+                    rhythm_pattern.append(beat_val)
+                    current_beats_sum += beat_val
+                else:
+                    remaining = total_beats - current_beats_sum
+                    if remaining > 0.01: # Add if substantial
+                         rhythm_pattern.append(remaining)
+                    current_beats_sum = total_beats # Break outer loop
+                    break 
+            if current_beats_sum >= total_beats: # Ensure outer loop terminates
                 break
         
-        return trimmed_pattern
+        return rhythm_pattern
 
 
 def demonstrate_music_generation():

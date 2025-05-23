@@ -1,0 +1,23 @@
+# Core dependencies
+numpy>=1.20.0
+scipy>=1.7.0
+scikit-learn>=0.24.0
+matplotlib>=3.3.0
+networkx>=2.6
+psutil>=5.8.0
+
+# Web app dependencies
+streamlit>=1.28.0
+
+# Audio processing
+pyaudio>=0.2.11
+
+# Optional performance backends (install as needed)
+# For CUDA support:
+# cupy-cuda11x>=10.0.0
+
+# For Metal support (Apple Silicon):
+# mlx>=0.0.3
+
+# For PyTorch (both CUDA and Metal):
+# torch>=2.0.0 

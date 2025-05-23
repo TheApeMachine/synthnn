@@ -1,7 +1,6 @@
 import numpy as np
 from adaptive import AdaptiveModalNetwork
 from detector import ModeDetector
-from abstract import ResonantNetwork
 
 class HierarchicalModalProcessor:
     """
@@ -10,35 +9,46 @@ class HierarchicalModalProcessor:
     fast local changes and slow global patterns.
     """
     
-    def __init__(self, time_scales=[0.1, 0.5, 2.0], num_nodes=5):
+    def __init__(self, time_scales=[0.1, 0.5, 2.0], num_nodes=5, base_process_sample_rate=44100.0):
         """
         Initialize hierarchical processor with multiple time scales.
         
         Args:
-            time_scales: List of time scale factors (smaller = faster/local, larger = slower/global)
-            num_nodes: Number of nodes per network
+            time_scales: List of time scale factors (e.g., duration in seconds for buffers)
+            num_nodes: Number of nodes per adaptive network
+            base_process_sample_rate: The sample rate at which this processor expects to receive signal chunks.
         """
         self.time_scales = time_scales
         self.num_levels = len(time_scales)
+        self.base_process_sample_rate = base_process_sample_rate
         
         # Create adaptive networks for each time scale
         self.scale_networks = []
-        for scale in time_scales:
+        for i, scale_duration in enumerate(time_scales):
+            # initial_base_freq for AdaptiveModalNetwork is somewhat arbitrary here,
+            # as it gets retuned by its process() method based on input signal fundamental.
+            # We can set it based on the scale, e.g., faster scales might have higher typical fundamentals.
+            # The buffer_size determines how much audio is processed at this scale.
+            buffer_size_samples = int(scale_duration * self.base_process_sample_rate)
+            if buffer_size_samples == 0: 
+                raise ValueError(f"Time scale {scale_duration}s is too short for sample rate {self.base_process_sample_rate}Hz, results in 0 sample buffer.")
+
+            # The effective frequency content seen by this network will depend on its buffer_size / processing window.
+            # We can use a nominal initial_base_freq, perhaps related to 1/scale_duration.
+            # The num_nodes_per_network in AdaptiveModalNetwork is different from num_nodes here.
+            # Let's use num_nodes for num_nodes_per_network in AdaptiveModalNetwork.
             network = AdaptiveModalNetwork(
                 num_nodes_per_network=num_nodes,
-                initial_base_freq=1.0 / scale  # Higher freq for faster scales
+                initial_base_freq= 1.0 / scale_duration if scale_duration > 0 else 1.0 
             )
             self.scale_networks.append({
                 'network': network,
-                'scale': scale,
+                'scale_duration': scale_duration, # Store the intended duration for this scale
                 'buffer': [],
-                'buffer_size': int(100 * scale)
+                'buffer_size_samples': buffer_size_samples
             })
         
-        # Cross-scale interaction weights
         self.interaction_matrix = self._initialize_interactions()
-        
-        # Feature fusion network
         self.fusion_network = ModalFeatureFusion(num_levels=self.num_levels)
         
     def _initialize_interactions(self):
@@ -56,16 +66,18 @@ class HierarchicalModalProcessor:
                     matrix[i, j] = 0.2
         return matrix
     
-    def process_signal(self, signal_stream, chunk_size=100):
+    def process_signal_chunk(self, signal_chunk, chunk_sample_rate):
         """
-        Process incoming signal stream hierarchically.
+        Process an incoming signal chunk hierarchically.
+        Note: Each scale network operates on its own buffer and its effective sample rate
+        might change if downsampling is applied internally to its buffer content.
         
         Args:
-            signal_stream: Incoming signal data
-            chunk_size: Size of processing chunks
+            signal_chunk: Current chunk of signal data
+            chunk_sample_rate: Sample rate of the incoming signal_chunk
             
         Returns:
-            dict: Multi-scale analysis results
+            dict: Multi-scale analysis results for this chunk processing cycle
         """
         results = {
             'scale_outputs': [],
@@ -74,55 +86,74 @@ class HierarchicalModalProcessor:
             'temporal_coherence': {}
         }
         
-        # Process at each time scale
+        all_scale_outputs_this_cycle = []
+
         for level_idx, scale_info in enumerate(self.scale_networks):
             network = scale_info['network']
-            scale = scale_info['scale']
+            scale_duration = scale_info['scale_duration'] # Time duration this scale focuses on
             buffer = scale_info['buffer']
+            buffer_size_samples = scale_info['buffer_size_samples']
             
-            # Add to buffer
-            buffer.extend(signal_stream)
+            # Add current chunk to this scale's buffer
+            buffer.extend(signal_chunk)
             
-            # Process when buffer is full
-            if len(buffer) >= scale_info['buffer_size']:
-                # Downsample for larger time scales
-                if scale > 1.0:
-                    downsampled = self._downsample(buffer, int(scale))
-                    scale_output = network.process(np.array(downsampled))
-                else:
-                    scale_output = network.process(np.array(buffer))
+            # Process if buffer has enough data for this scale's intended duration
+            if len(buffer) >= buffer_size_samples:
+                # Take the most recent `buffer_size_samples` for processing
+                current_processing_segment = np.array(buffer[-buffer_size_samples:])
+                effective_sample_rate_for_segment = chunk_sample_rate # Assuming input chunk_sample_rate is constant
+
+                # No explicit downsampling here anymore, AdaptiveModalNetwork handles segment
+                # The `scale_duration` concept is now managed by `buffer_size_samples`.
+                # AdaptiveModalNetwork will process this segment at `effective_sample_rate_for_segment`.
+
+                scale_output_scalar = network.process(current_processing_segment, effective_sample_rate_for_segment)
                 
-                # Get mode information
                 mode_probs = network.mode_detector.get_mode_probabilities(
-                    np.array(buffer), 
-                    sample_rate=1.0/scale
+                    current_processing_segment, 
+                    sample_rate=effective_sample_rate_for_segment
                 )
                 
-                # Store results
-                results['scale_outputs'].append({
+                current_scale_result = {
                     'level': level_idx,
-                    'scale': scale,
-                    'output': scale_output,
+                    'scale_duration': scale_duration,
+                    'output': scale_output_scalar,
                     'mode_probabilities': mode_probs,
-                    'dominant_mode': max(mode_probs.items(), key=lambda x: x[1])[0]
-                })
+                    'dominant_mode': max(mode_probs.items(), key=lambda x: x[1])[0] if mode_probs else "N/A"
+                }
+                all_scale_outputs_this_cycle.append(current_scale_result)
                 
-                # Clear buffer
-                scale_info['buffer'] = buffer[-scale_info['buffer_size']//2:]
-        
-        # Cross-scale interaction
-        if len(results['scale_outputs']) == self.num_levels:
-            results['fused_output'] = self._fuse_scales(results['scale_outputs'])
-            results['temporal_coherence'] = self._analyze_coherence(results['scale_outputs'])
+                # Manage buffer: keep some overlap, discard the processed part that led to full buffer_size_samples
+                # This is a simple FIFO overlap; more sophisticated windowing could be used.
+                overlap = buffer_size_samples // 2 
+                scale_info['buffer'] = list(buffer[len(buffer) - buffer_size_samples + overlap :])
+            else:
+                # Not enough data in buffer for this scale to process yet
+                all_scale_outputs_this_cycle.append(None) # Placeholder or previous state?
+
+        # Only proceed with fusion if all scales produced an output this cycle
+        # Or handle partial updates depending on desired behavior.
+        # For now, let's assume we wait for all scales that were supposed to produce output.
+        valid_scale_outputs = [s_out for s_out in all_scale_outputs_this_cycle if s_out is not None]
+        results['scale_outputs'] = valid_scale_outputs
+
+        if len(valid_scale_outputs) == self.num_levels: # Or some other condition like len(valid_scale_outputs) > 0
+            results['fused_output'] = self._fuse_scales(valid_scale_outputs)
+            results['temporal_coherence'] = self._analyze_coherence(valid_scale_outputs)
             
         return results
     
-    def _downsample(self, signal, factor):
+    def _downsample(self, signal_array, factor):
         """Downsample signal by averaging chunks"""
-        downsampled = []
-        for i in range(0, len(signal) - factor + 1, factor):
-            downsampled.append(np.mean(signal[i:i+factor]))
-        return downsampled
+        if factor <= 1:
+            return signal_array
+        # Ensure signal_array is a numpy array for efficient slicing
+        signal_array = np.asarray(signal_array)
+        num_chunks = len(signal_array) // factor
+        if num_chunks == 0:
+            return np.array([]) # Return empty if not enough data to form one chunk
+        trimmed_length = num_chunks * factor
+        return np.mean(signal_array[:trimmed_length].reshape(-1, factor), axis=1)
     
     def _fuse_scales(self, scale_outputs):
         """Fuse outputs from different scales using interaction matrix"""
@@ -146,22 +177,38 @@ class HierarchicalModalProcessor:
         coherence = {}
         
         # Check if modes align across scales
-        modes = [s['dominant_mode'] for s in scale_outputs]
-        mode_agreement = len(set(modes)) == 1
+        modes = [s['dominant_mode'] for s in scale_outputs if s and 'dominant_mode' in s]
+        if len(modes) == self.num_levels and self.num_levels > 0: # Ensure all levels reported a mode
+            mode_agreement = len(set(modes)) == 1
+        else:
+            mode_agreement = "N/A" # Not all scales produced output or dominant mode
         
         coherence['mode_alignment'] = mode_agreement
         coherence['mode_distribution'] = modes
         
-        # Calculate cross-scale correlation
+        # Calculate cross-scale correlation - only meaningful if outputs are time series
+        # Current 'output' from AdaptiveModalNetwork.process is a scalar per chunk.
+        # To do meaningful correlation, we'd need to store a history of these scalars
+        # for each scale and then correlate those histories.
+        # For now, this part will likely produce NaNs or be skipped.
+        coherence['scale_correlations'] = [] # Initialize as empty
         if len(scale_outputs) > 1:
-            correlations = []
-            for i in range(len(scale_outputs) - 1):
-                corr = np.corrcoef(
-                    [scale_outputs[i]['output']], 
-                    [scale_outputs[i+1]['output']]
-                )[0, 1]
-                correlations.append(corr)
-            coherence['scale_correlations'] = correlations
+            # Example: If we were to correlate the *current* scalar outputs (not very meaningful)
+            # This part is illustrative and likely won't yield deep insights with single scalars.
+            # For a proper implementation, accumulate time series of outputs per scale.
+            # For now, let's leave it empty to avoid warnings with scalar inputs.
+            pass
+            # output_values = [s['output'] for s in scale_outputs if s and 'output' in s]
+            # if len(output_values) > 1:
+            #     try:
+            #         # This will still warn if not enough variance, e.g. all outputs are same
+            #         # Pad to at least 2 elements if only one for a pair to avoid error,
+            #         # but corrcoef of [x,x] and [y,y] is nan.
+            #         # We simply skip if not enough data for meaningful correlation.
+            #         pass # Skipping for now to avoid warnings with scalar outputs.
+            #     except Exception as e:
+            #         print(f"Warning: Could not compute correlation: {e}")
+            #         coherence['scale_correlations'] = [np.nan] * (len(scale_outputs) - 1)
         
         return coherence
 
@@ -222,13 +269,15 @@ class ModalFeatureFusion:
 def demonstrate_hierarchical_processing():
     """Demonstrate hierarchical modal processing"""
     # Create processor
+    global_sample_rate = 1000 # Hz, for the generated test signal
     processor = HierarchicalModalProcessor(
-        time_scales=[0.5, 1.0, 2.0],  # Fast, medium, slow
-        num_nodes=5
+        time_scales=[0.5, 1.0, 2.0],  # Time windows in seconds
+        num_nodes=5,
+        base_process_sample_rate=global_sample_rate
     )
     
     # Generate test signal with multiple frequency components
-    t = np.linspace(0, 10, 1000)
+    t = np.linspace(0, 10, 10 * global_sample_rate, endpoint=False)
     
     # Fast oscillation
     fast_component = np.sin(2 * np.pi * 5 * t)
@@ -246,14 +295,14 @@ def demonstrate_hierarchical_processing():
     signal += 0.2 * np.sin(2 * np.pi * 5 * 9/8 * t)  # Dorian second
     signal += 0.1 * np.sin(2 * np.pi * 5 * 5/4 * t)  # Major third
     
-    # Process in chunks
-    chunk_size = 100
+    chunk_size = int(0.1 * global_sample_rate) # Process 100ms chunks
     all_results = []
     
-    for i in range(0, len(signal) - chunk_size, chunk_size):
+    for i in range(0, len(signal) - chunk_size + 1, chunk_size):
         chunk = signal[i:i+chunk_size]
-        results = processor.process_signal(chunk, chunk_size)
-        all_results.append(results)
+        results = processor.process_signal_chunk(chunk, global_sample_rate)
+        if results['scale_outputs']: # Only append if there was processing done
+            all_results.append(results)
     
     # Analyze results
     print("Hierarchical Modal Processing Results:")
@@ -263,7 +312,7 @@ def demonstrate_hierarchical_processing():
         print(f"\nChunk {i}:")
         if 'scale_outputs' in results:
             for scale_out in results['scale_outputs']:
-                print(f"  Scale {scale_out['scale']}: {scale_out['dominant_mode']}")
+                print(f"  Scale {scale_out['scale_duration']:.2f}s: {scale_out['dominant_mode']}")
         
         if 'temporal_coherence' in results:
             print(f"  Mode alignment: {results['temporal_coherence'].get('mode_alignment', 'N/A')}")

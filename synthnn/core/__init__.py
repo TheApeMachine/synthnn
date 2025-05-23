@@ -1,15 +1,12 @@
 """
 SynthNN Core Module
 
-This module provides the fundamental building blocks for the SynthNN framework:
-- ResonantNode: Basic oscillating unit
-- ResonantNetwork: Network of interconnected nodes
-- SignalProcessor: Signal analysis and transformation tools
-- Pattern codecs: Encoders and decoders for various data types
+This module provides the fundamental building blocks for synthetic resonant neural networks,
+including nodes, networks, signal processing, and pattern encoding/decoding.
 """
 
 from .resonant_node import ResonantNode
-from .resonant_network import ResonantNetwork, Connection
+from .resonant_network import ResonantNetwork
 from .signal_processor import SignalProcessor
 from .pattern_codec import (
     PatternEncoder,
@@ -22,11 +19,12 @@ from .pattern_codec import (
     ImagePatternDecoder,
     UniversalPatternCodec
 )
+from .musical_extensions import MusicalResonantNetwork
+from .accelerated_musical_network import AcceleratedMusicalNetwork
 
 __all__ = [
     'ResonantNode',
     'ResonantNetwork',
-    'Connection',
     'SignalProcessor',
     'PatternEncoder',
     'PatternDecoder',
@@ -36,7 +34,9 @@ __all__ = [
     'TextPatternDecoder',
     'ImagePatternEncoder',
     'ImagePatternDecoder',
-    'UniversalPatternCodec'
+    'UniversalPatternCodec',
+    'MusicalResonantNetwork',
+    'AcceleratedMusicalNetwork'
 ]
 
 __version__ = '0.1.0' 

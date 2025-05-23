@@ -1,12 +1,13 @@
-from abstract import ResonantNetwork as AbstractResNet, ResonantNode # For type hinting / instantiation
+from synthnn.core import AcceleratedMusicalNetwork, ResonantNode # For type hinting / instantiation
 from detector import ModeDetector # Assuming detector.py contains ModeDetector
 import numpy as np
+import time
 
 class AdaptiveModalNetwork:
     def __init__(self, num_nodes_per_network=5, initial_base_freq=1.0, target_phase=0.0, target_amplitude=1.0):
         self.mode_detector = ModeDetector()
-        self.mode_networks = {}
-        self.time_steps = np.linspace(0, 1, 100) # Default time_steps for internal processing
+        self.mode_networks: dict[str, AcceleratedMusicalNetwork] = {}
+        # self.time_steps = np.linspace(0, 1, 100) # Default time_steps for internal processing - may not be needed if generating audio
         
         # Add temporal memory
         self.mode_history = []  # Track mode probabilities over time
@@ -17,108 +18,112 @@ class AdaptiveModalNetwork:
 
         # Initialize networks for each mode
         for mode_name, intervals in self.mode_detector.mode_intervals.items():
+            network_instance = AcceleratedMusicalNetwork(
+                name=f"adaptive_{mode_name}_{int(time.time())}",
+                base_freq=initial_base_freq, 
+                mode=mode_name, 
+                mode_detector=self.mode_detector
+            )
+            
+            # Populate with nodes based on its own mode's intervals
             current_ratios = intervals[:num_nodes_per_network]
             if len(current_ratios) < num_nodes_per_network:
                 current_ratios.extend([current_ratios[-1]] * (num_nodes_per_network - len(current_ratios)))
             
-            # Initialize the ResonantNetwork with its designated mode and intervals
-            # The 'ResonantNetwork' needs to be modified to accept 'mode_name' and use it.
-            # Or, it just takes harmonic_ratios and doesn't care about the name itself.
-            self.mode_networks[mode_name] = AbstractResNet(
-                num_nodes=num_nodes_per_network,
-                base_freq=initial_base_freq, # This is an initial base frequency
-                harmonic_ratios=current_ratios, # These are fixed for this mode network
-                target_phase=target_phase,
-                target_amplitude=target_amplitude
-            )
-            # Add a 'process_input' method to ResonantNetwork (as sketched above)
-            # For this to work, ResonantNetwork must be designed to call self._apply_retuning correctly.
-            # Crucially, `ResonantNetwork.mode` should be set to `mode_name` for the sketch above to work.
-            self.mode_networks[mode_name].mode = mode_name # Set the mode for this network instance
+            # Create nodes using the network's method, which uses its base_freq
+            # The amplitude and phase are set per node by create_harmonic_nodes if not specified per node
+            # Here we are creating nodes one by one to match the old logic more closely initially for parameters.
+            for i, ratio in enumerate(current_ratios):
+                node = ResonantNode(
+                    node_id=f"{mode_name}_node_{i}", 
+                    frequency=network_instance.base_freq * ratio, # Uses the network's current base_freq
+                    amplitude=target_amplitude / np.sqrt(num_nodes_per_network), # Distribute amplitude
+                    phase=target_phase
+                )
+                network_instance.add_node(node)
+            
+            if num_nodes_per_network > 1:
+                network_instance.create_modal_connections(connection_pattern="nearest_neighbor", weight_scale=0.1)
+                network_instance.coupling_strength = 0.05 # Low coupling for more independent modal character
 
-            print(f"Initialized ResonantNetwork for {mode_name}")
+            self.mode_networks[mode_name] = network_instance
+            print(f"Initialized AcceleratedMusicalNetwork for {mode_name}")
 
     def process(self, signal_segment, sample_rate=1.0):
         if not signal_segment.any(): # Handle empty signal
-            return 0
+            return 0.0 # Return float
 
         mode_probabilities = self.mode_detector.get_mode_probabilities(signal_segment, sample_rate)
         
-        # Store in temporal memory
         self.mode_history.append(mode_probabilities)
         if len(self.mode_history) > self.memory_window:
             self.mode_history.pop(0)
         
-        # Detect mode transitions and adjust accordingly
         if len(self.mode_history) > 2:
+            # Fundamental history might need to be populated if transition_detector uses it
+            # For now, passing None or an empty list if not available.
+            fund_history_slice = self.fundamental_history[-3:] if len(self.fundamental_history) >= 3 else None
             transition_info = self.transition_detector.analyze_transition(
                 self.mode_history[-3:], 
-                self.fundamental_history[-3:] if len(self.fundamental_history) >= 3 else None
+                fund_history_slice
             )
             
-            # Smooth transitions between modes
             if transition_info['transitioning']:
                 mode_probabilities = self._smooth_mode_transition(
                     mode_probabilities, 
                     transition_info
                 )
 
-        # For adaptive retuning of each mode network, extract fundamental from the current signal segment
-        features = self.mode_detector._extract_features(signal_segment, sample_rate)
-        signal_fundamental = features.get('fundamental', 1.0)
+        # Extract fundamental for retuning
+        # Use the SignalProcessor from an arbitrary network instance (they share one if not passed)
+        # Or instantiate one here.
+        temp_signal_processor = self.mode_networks[list(self.mode_networks.keys())[0]].signal_processor
+        temp_signal_processor.sample_rate = sample_rate # Ensure correct sample rate
+        
+        # features = self.mode_detector._extract_features(signal_segment, sample_rate)
+        # Instead of relying on mode_detector internal method, use SignalProcessor directly
+        _, spec_mags = temp_signal_processor.analyze_spectrum(signal_segment)
+        signal_fundamental = temp_signal_processor.extract_fundamental(signal_segment, freq_range=(30,2000))
+
         if signal_fundamental == 0: signal_fundamental = 1.0 # Avoid zero frequency
+        self.fundamental_history.append(signal_fundamental)
+        if len(self.fundamental_history) > self.memory_window:
+             self.fundamental_history.pop(0)
         
         total_weighted_output = 0.0
+        segment_duration = len(signal_segment) / sample_rate
+        if segment_duration == 0: return 0.0
 
         for mode_name, network_instance in self.mode_networks.items():
             probability = mode_probabilities.get(mode_name, 0.0)
-            if probability > 0.001: # Small threshold to avoid processing for near-zero probabilities
-                # Temporarily set the base_freq of the network for this processing run
-                # This requires ResonantNetwork to be able to adapt its node frequencies
-                # based on a new base_freq while keeping its modal harmonic_ratios.
-                original_base_freq = network_instance.base_freq
-                # network_instance.base_freq = signal_fundamental # This itself isn't enough; nodes need retuning
+            if probability > 0.001: 
+                # Retune this mode-specific network to the current signal's fundamental
+                network_instance._retune_to_mode(
+                    signal_fundamental, 
+                    self.mode_detector.mode_intervals[mode_name]
+                )
                 
-                # Let's refine ResonantNetwork: add a method to retune based on a *new base frequency*
-                # while preserving its characteristic modal ratios.
-                # `retune_to_new_base(self, new_base_freq, current_time_steps)`
-                # Inside ResonantNetwork:
-                # def retune_to_new_base(self, new_base_freq, current_time_steps, mode_detector_ref):
-                #     self.base_freq = new_base_freq
-                #     modal_ratios = mode_detector_ref.mode_intervals[self.mode]
-                #     # Trim/pad modal_ratios to self.num_nodes
-                #     final_ratios = modal_ratios[:self.num_nodes] 
-                #     if len(final_ratios) < self.num_nodes:
-                #         final_ratios.extend(...) 
-                #     new_frequencies = [new_base_freq * ratio for ratio in final_ratios]
-                #     self._apply_retuning(new_frequencies, current_time_steps) # Call existing helper
+                # Generate a short audio output from this retuned mode network
+                network_output_signal = network_instance.generate_audio_accelerated(
+                    segment_duration, 
+                    sample_rate
+                )
                 
-                # In AdaptiveModalNetwork.process:
-                network_instance.retune_to_new_base(signal_fundamental, self.time_steps, self.mode_detector) # Assume this method exists and retunes nodes
+                # Represent network's response as a scalar (e.g., mean absolute amplitude)
+                # This scalar value is then weighted by the mode probability.
+                # Could also be energy, synchronization, or a specific feature.
+                network_scalar_response = np.mean(np.abs(network_output_signal)) if network_output_signal.any() else 0.0
                 
-                # After retuning to the signal's fundamental, compute harmonic state.
-                network_instance.harmonic_outputs = [] # Clear
-                network_instance.compute_harmonic_state(self.time_steps) # Uses the newly retuned freqs
+                total_weighted_output += probability * network_scalar_response
 
-                # Define network_output based on the harmonic state
-                network_output = np.sum(network_instance.harmonic_outputs[-1]) if network_instance.harmonic_outputs else 0.0
-                
-                total_weighted_output += probability * network_output
-                
-                # Optional: restore original_base_freq if necessary, though for continuous processing,
-                # the base_freq should adapt to the input.
-                # network_instance.base_freq = original_base_freq (and retune nodes back)
-
-        # Store output for temporal coherence
         self.output_history.append(total_weighted_output)
         if len(self.output_history) > self.memory_window:
             self.output_history.pop(0)
             
-        # Apply temporal smoothing if needed
         if len(self.output_history) > 3:
             total_weighted_output = self._apply_temporal_smoothing(
                 total_weighted_output,
-                self.output_history[-3:]
+                self.output_history[-3:] # Pass only the relevant slice
             )
 
         return total_weighted_output
@@ -142,10 +147,11 @@ class AdaptiveModalNetwork:
     
     def _apply_temporal_smoothing(self, current_output, recent_outputs):
         """Apply temporal smoothing to reduce abrupt changes"""
-        # Combine recent outputs with current
-        all_outputs = recent_outputs + [current_output]
+        # Ensure recent_outputs is a list of numbers
+        valid_recent_outputs = [out for out in recent_outputs if isinstance(out, (int, float))]
         
-        # Create weights based on actual number of outputs
+        all_outputs = valid_recent_outputs + [current_output]
+        
         num_outputs = len(all_outputs)
         if num_outputs == 1:
             return current_output
