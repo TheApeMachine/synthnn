@@ -21,6 +21,12 @@ from .pattern_codec import (
 )
 from .musical_extensions import MusicalResonantNetwork
 from .accelerated_musical_network import AcceleratedMusicalNetwork
+from .microtonal_extensions import (
+    MicrotonalScale,
+    MicrotonalScaleLibrary,
+    MicrotonalResonantNetwork,
+    AdaptiveMicrotonalSystem
+)
 
 __all__ = [
     'ResonantNode',
@@ -36,7 +42,11 @@ __all__ = [
     'ImagePatternDecoder',
     'UniversalPatternCodec',
     'MusicalResonantNetwork',
-    'AcceleratedMusicalNetwork'
+    'AcceleratedMusicalNetwork',
+    'MicrotonalScale',
+    'MicrotonalScaleLibrary',
+    'MicrotonalResonantNetwork',
+    'AdaptiveMicrotonalSystem'
 ]
 
 __version__ = '0.1.0' 
