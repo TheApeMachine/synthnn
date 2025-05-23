@@ -22,6 +22,7 @@ class ResonantNetwork:
         Initialize the nodes based on harmonic intervals relative to a base frequency.
         :param harmonic_ratios: List of harmonic ratios (e.g., [1, 1.5, 1.33]) to space nodes.
         """
+        self.base_freq = base_freq  # Store base frequency
         self.nodes = [ResonantNode(freq=base_freq * ratio, phase=target_phase, amplitude=target_amplitude, node_id=i+1)
                       for i, ratio in enumerate(harmonic_ratios)]
         self.num_nodes = num_nodes
@@ -46,19 +47,103 @@ class ResonantNetwork:
             outputs = [node.compute(t) + foreign_signal[idx] for node in self.nodes]
             self.dissonant_outputs.append(outputs)
     
-    def retune_nodes(self, foreign_signal, time_steps):
-        """
-        Retune nodes to match the new harmonic structure formed by the foreign signal.
-        """
-        foreign_freq = self.analyze_foreign_signal(foreign_signal)
-        self.mode = self.select_mode(foreign_freq)  # Choose the mode
-        new_harmonic_structure = self.get_mode_intervals(self.mode, foreign_freq)
+    # Inside ResonantNetwork class from abstract.py
+    def retune_nodes(self, foreign_signal, time_steps, mode_detector_instance): # Add detector
+        # foreign_freq = self.analyze_foreign_signal(foreign_signal) # Old way
+        
+        features = mode_detector_instance._extract_features(foreign_signal, sample_rate=1.0 / (time_steps[1]-time_steps[0]) if len(time_steps)>1 else 1.0) # crude sample_rate
+        foreign_freq = features.get('fundamental', 1.0)
+        if foreign_freq == 0: foreign_freq = 1.0
+
+        self.mode = mode_detector_instance.analyze(foreign_signal, sample_rate=1.0/(time_steps[1]-time_steps[0]) if len(time_steps)>1 else 1.0)
+        
+        # Get intervals directly from mode_detector's definitions
+        new_harmonic_structure_ratios = mode_detector_instance.mode_intervals[self.mode]
+        
+        # Ensure new_harmonic_structure matches the number of nodes
+        # If your ResonantNetwork has a fixed num_nodes, you need to select
+        # a subset of these ratios or pad them.
+        # Let's assume we use as many ratios as we have nodes, taking from the start of the list.
+        final_ratios_for_nodes = new_harmonic_structure_ratios[:self.num_nodes]
+        if len(final_ratios_for_nodes) < self.num_nodes: # Padding if mode has too few intervals for num_nodes
+            final_ratios_for_nodes.extend([final_ratios_for_nodes[-1]] * (self.num_nodes - len(final_ratios_for_nodes)))
+
+        new_frequencies = [foreign_freq * ratio for ratio in final_ratios_for_nodes]
+        
+        # The rest of the retuning loop is fine...
+        # for t in time_steps:
+        #     for node, new_freq in zip(self.nodes, new_frequencies): # Make sure this zip matches
+        #         node.retune(new_freq, node.phase, node.amplitude)
+        #     outputs = [node.compute(t) for node in self.nodes]
+        #     self.retuned_outputs.append(outputs)
+        # Simpler retuning call:
+        self._apply_retuning(new_frequencies, time_steps)
+
+    def _apply_retuning(self, new_frequencies, time_steps):
+        self.retuned_outputs = [] # Clear previous
+        temp_original_node_params = [(node.freq, node.phase, node.amplitude) for node in self.nodes]
+
+        for node_idx, new_freq in enumerate(new_frequencies):
+            if node_idx < len(self.nodes):
+                self.nodes[node_idx].retune(new_freq, self.nodes[node_idx].phase, self.nodes[node_idx].amplitude)
         
         for t in time_steps:
-            for node, new_freq in zip(self.nodes, new_harmonic_structure):
-                node.retune(new_freq, node.phase, node.amplitude)
             outputs = [node.compute(t) for node in self.nodes]
             self.retuned_outputs.append(outputs)
+
+        # Optionally restore original params if this retuning is just for one processing pass
+        # For a persistent retune, this restoration is not needed.
+        # for node_idx, params in enumerate(temp_original_node_params):
+        #    self.nodes[node_idx].retune(*params)    
+  
+    def retune_to_new_base(self, new_base_freq, current_time_steps, mode_detector_ref):
+        """
+        Retune all nodes to a new base frequency while preserving modal intervals.
+        
+        Args:
+            new_base_freq: The new base frequency to tune to
+            current_time_steps: Time steps for computing outputs
+            mode_detector_ref: Reference to mode detector for getting modal intervals
+        """
+        self.base_freq = new_base_freq
+        modal_ratios = mode_detector_ref.mode_intervals[self.mode]
+        
+        # Trim/pad modal_ratios to self.num_nodes
+        final_ratios = modal_ratios[:self.num_nodes] 
+        if len(final_ratios) < self.num_nodes:
+            final_ratios.extend([final_ratios[-1]] * (self.num_nodes - len(final_ratios)))
+            
+        new_frequencies = [new_base_freq * ratio for ratio in final_ratios]
+        self._apply_retuning(new_frequencies, current_time_steps)
+
+    # In abstract.py, add to ResonantNetwork class:
+    # (This is a conceptual 'process' method; details depend on desired output)
+    # def process_input(self, input_signal_segment, current_time_steps, mode_detector_instance=None):
+    #     self.harmonic_outputs = []  # Clear previous outputs
+    #     self.retuned_outputs = []   # Clear previous retuned outputs
+
+    #     # Option 1: The network retunes itself based on the input signal and its inherent mode.
+    #     # This requires the ResonantNetwork to know its primary mode.
+    #     # Let's say its self.mode is set during initialization (e.g., 'Ionian')
+    #     if mode_detector_instance:
+    #         features = mode_detector_instance._extract_features(input_signal_segment, sample_rate=1.0 / (current_time_steps[1]-current_time_steps[0]))
+    #         signal_fundamental = features.get('fundamental', self.base_freq) # Use own base_freq as fallback
+    #         if signal_fundamental == 0: signal_fundamental = self.base_freq
+
+    #         # The mode is fixed for this network instance; we retune relative to signal_fundamental
+    #         current_mode_ratios = mode_detector_instance.mode_intervals[self.mode]
+    #         final_ratios_for_nodes = current_mode_ratios[:self.num_nodes]
+    #         # (Add padding logic for final_ratios_for_nodes if necessary)
+
+    #         new_frequencies = [signal_fundamental * ratio for ratio in final_ratios_for_nodes]
+    #         self._apply_retuning(new_frequencies, current_time_steps) # Use the helper
+    #         # Output could be the sum of the last step of retuned_outputs
+    #         return np.sum(self.retuned_outputs[-1]) if self.retuned_outputs else 0
+
+    #     # Option 2: The network simply computes its output based on its current (fixed) tuning.
+    #     # The 'input_signal_segment' might be used to create a 'dissonant' state.
+    #     # self.compute_dissonant_state(current_time_steps, input_signal_segment)
+    #     # return np.sum(self.dissonant_outputs[-1]) if self.dissonant_outputs else 0  
     
     def analyze_foreign_signal(self, foreign_signal):
         """
@@ -169,25 +254,33 @@ class Plotter:
         plt.tight_layout()
         plt.show()
 
-# Example usage
-base_freq = 1.0  # Base frequency for the harmonically tuned state
-harmonic_ratios = [1, 1.5, 1.33, 2, 2.5]  # Harmonic intervals for the nodes
-target_phase = 0.0
-target_amplitude = 1.0
-num_nodes = len(harmonic_ratios)
-time_steps = np.linspace(0, 5, 500)
-foreign_signal = np.sin(2 * np.pi * 1.5 * time_steps)  # A foreign signal with a different frequency
+# Move example usage into main block to prevent execution on import
+if __name__ == "__main__":
+    # Import required for example
+    from detector import ModeDetector
+    
+    # Example usage
+    base_freq = 1.0  # Base frequency for the harmonically tuned state
+    harmonic_ratios = [1, 1.5, 1.33, 2, 2.5]  # Harmonic intervals for the nodes
+    target_phase = 0.0
+    target_amplitude = 1.0
+    num_nodes = len(harmonic_ratios)
+    time_steps = np.linspace(0, 5, 500)
+    foreign_signal = np.sin(2 * np.pi * 1.5 * time_steps)  # A foreign signal with a different frequency
 
-# Create and propagate network
-network = ResonantNetwork(num_nodes, base_freq, harmonic_ratios, target_phase, target_amplitude)
-network.compute_harmonic_state(time_steps)
-network.compute_dissonant_state(time_steps, foreign_signal)
-network.retune_nodes(foreign_signal, time_steps)
+    # Create mode detector instance
+    mode_detector = ModeDetector()
+    
+    # Create and propagate network
+    network = ResonantNetwork(num_nodes, base_freq, harmonic_ratios, target_phase, target_amplitude)
+    network.compute_harmonic_state(time_steps)
+    network.compute_dissonant_state(time_steps, foreign_signal)
+    network.retune_nodes(foreign_signal, time_steps, mode_detector)  # Pass mode_detector instance
 
-# Plot the results
-plotter = Plotter(network, time_steps, foreign_signal)
-plotter.plot_harmonic_state()
-plotter.plot_dissonant_state()
-plotter.plot_difference()
-plotter.plot_retuned_state()
-plotter.show()
+    # Plot the results
+    plotter = Plotter(network, time_steps, foreign_signal)
+    plotter.plot_harmonic_state()
+    plotter.plot_dissonant_state()
+    plotter.plot_difference()
+    plotter.plot_retuned_state()
+    plotter.show()
