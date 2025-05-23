@@ -233,7 +233,7 @@ python main.py --shell
 
 We've implemented a comprehensive audio cleanup system based on the resonance principles to remove artifacts from AI-generated audio (like persistent whistling tones, shimmer, etc.):
 
-### **Audio Cleanup Engine** 
+### **Audio Cleanup Engine**
 
 [`audio_cleanup.py`](synthnn/core/audio_cleanup.py)
 
@@ -244,19 +244,21 @@ We've implemented a comprehensive audio cleanup system based on the resonance pr
 - **Mode Enforcement**: Ensures cleaned audio conforms to musical modes/scales
 - **Transient Preservation**: Keeps drum hits and attacks intact while removing tonal artifacts
 
-### Three Cleanup Approaches:
+### Three Cleanup Approaches
 
 1. **Simple**: Fast notch filtering at detected artifact frequencies
 2. **Resynthesis**: Complete resynthesize through resonant network (best quality)
 3. **Adaptive**: Learns from clean examples to optimize cleanup
 
-This addresses the exact problem mentioned - those persistent whistling tones in Suno-generated audio can now be detected and removed while preserving the musical content!
+This addresses the exact problem mentioned - those persistent whistling tones in AI generated audio can now be detected and removed while preserving the musical content!
 
 ## 🎵 Musical Enhancements Implemented
 
 We've significantly enhanced SynthNN's musical capabilities to create richer, more expressive audio:
 
-### 1. **Advanced Musical Synthesis** (`musical_synthesis.py`)
+### 1. **Advanced Musical Synthesis**
+
+[`musical_synthesis.py`](synthnn/core/musical_synthesis.py)
 
 - **Multi-oscillator synthesis**: Combine sine, sawtooth, square, triangle, pulse, and noise waves
 - **ADSR Envelopes**: Full attack-decay-sustain-release control for amplitude and filter modulation
@@ -265,7 +267,9 @@ We've significantly enhanced SynthNN's musical capabilities to create richer, mo
 - **Modulation**: Vibrato (pitch) and tremolo (amplitude) modulation
 - **MusicalNode**: Extended ResonantNode with trigger/release and velocity sensitivity
 
-### 2. **Rhythm Engine** (`rhythm_engine.py`)
+### 2. **Rhythm Engine**
+
+[`rhythm_engine.py`](synthnn/core/rhythm_engine.py)
 
 - **Time signatures**: Support for various meters (4/4, 3/4, 6/8, etc.)
 - **Pattern library**: Built-in patterns (rock, jazz, funk, latin) and custom patterns
@@ -274,7 +278,9 @@ We've significantly enhanced SynthNN's musical capabilities to create richer, mo
 - **Polyrhythms**: Generate complex rhythmic relationships (3:2, 5:4, etc.)
 - **Sync with networks**: Rhythm engine can sync with musical networks
 
-### 3. **Composition Engine** (`composition_engine.py`)
+### 3. **Composition Engine**
+
+[`composition_engine.py`](synthnn/core/composition_engine.py)
 
 - **Musical styles**: Classical, Jazz, Electronic, Ambient, Rock, World, Minimalist
 - **Song structure**: AABA, ABAB, verse-chorus forms with sections
@@ -295,7 +301,7 @@ These musical features integrate seamlessly with SynthNN's resonant network arch
 - Emotional resonance affects timbre and dynamics
 - Evolutionary algorithms can optimize for musical fitness
 
-### Example Usage:
+### Example Usage
 
 ```python
 # Create a jazz composition
@@ -312,12 +318,16 @@ rhythm.activate_pattern('jazz_ride', DrumVoice.RIDE)
 groove = rhythm.grooves['swing']  # Apply swing feel
 ```
 
-This brings SynthNN much closer to systems like Suno in terms of musical richness while maintaining our unique resonance-based approach. The key differences:
-
-- **Suno**: Data-driven, learns from massive datasets
-- **SynthNN**: Physics/theory-driven, uses musical principles and resonance
-
 ---
+
+## 🎯 Real-World Applications
+
+### 🎵 **Music & Audio**
+
+- **Adaptive composition**: AI that responds to musical context
+- **Microtonal systems**: Support for diverse cultural music traditions
+- **Real-time performance**: Live electronic music with AI accompaniment
+- **Audio restoration**: Signal processing without FFT artifacts
 
 ## 🎯 Real-World Applications
 
