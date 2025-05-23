@@ -1,3 +1,8 @@
+"""
+NOTE: This file contains code from an earlier experimental phase of the project,
+focused on classification tasks. It is not currently part of the main
+music generation pipeline but is retained for reference.
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import load_iris

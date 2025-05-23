@@ -1,3 +1,8 @@
+"""
+NOTE: This file contains code from an earlier experimental phase of the project,
+focused on simple token-based code generation. It is not currently part of 
+the main music generation pipeline but is retained for reference.
+"""
 import numpy as np
 import re
 from sklearn.model_selection import train_test_split
