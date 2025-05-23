@@ -229,6 +229,96 @@ python main.py --shell
 
 ---
 
+## 🧹 Audio Cleanup
+
+We've implemented a comprehensive audio cleanup system based on the resonance principles to remove artifacts from AI-generated audio (like persistent whistling tones, shimmer, etc.):
+
+### **Audio Cleanup Engine** 
+
+[`audio_cleanup.py`](synthnn/core/audio_cleanup.py)
+
+- **Artifact Detection**: Automatically detects whistling tones, hum, and non-harmonic artifacts
+- **Resonance-based Filtering**: Uses damped resonators as notch filters
+- **Resynthesis Cleanup**: Encodes audio to resonant patterns, filters in that domain, then resynthesizes
+- **Adaptive Learning**: Can learn from clean reference audio to better target artifacts
+- **Mode Enforcement**: Ensures cleaned audio conforms to musical modes/scales
+- **Transient Preservation**: Keeps drum hits and attacks intact while removing tonal artifacts
+
+### Three Cleanup Approaches:
+
+1. **Simple**: Fast notch filtering at detected artifact frequencies
+2. **Resynthesis**: Complete resynthesize through resonant network (best quality)
+3. **Adaptive**: Learns from clean examples to optimize cleanup
+
+This addresses the exact problem mentioned - those persistent whistling tones in Suno-generated audio can now be detected and removed while preserving the musical content!
+
+## 🎵 Musical Enhancements Implemented
+
+We've significantly enhanced SynthNN's musical capabilities to create richer, more expressive audio:
+
+### 1. **Advanced Musical Synthesis** (`musical_synthesis.py`)
+
+- **Multi-oscillator synthesis**: Combine sine, sawtooth, square, triangle, pulse, and noise waves
+- **ADSR Envelopes**: Full attack-decay-sustain-release control for amplitude and filter modulation
+- **Filters**: Low-pass, high-pass, band-pass, notch filters with resonance
+- **Effects**: Built-in reverb and delay with feedback
+- **Modulation**: Vibrato (pitch) and tremolo (amplitude) modulation
+- **MusicalNode**: Extended ResonantNode with trigger/release and velocity sensitivity
+
+### 2. **Rhythm Engine** (`rhythm_engine.py`)
+
+- **Time signatures**: Support for various meters (4/4, 3/4, 6/8, etc.)
+- **Pattern library**: Built-in patterns (rock, jazz, funk, latin) and custom patterns
+- **Groove templates**: Add swing and humanization for natural feel
+- **Drum synthesis**: Specialized synthesis for kick, snare, hi-hat, etc.
+- **Polyrhythms**: Generate complex rhythmic relationships (3:2, 5:4, etc.)
+- **Sync with networks**: Rhythm engine can sync with musical networks
+
+### 3. **Composition Engine** (`composition_engine.py`)
+
+- **Musical styles**: Classical, Jazz, Electronic, Ambient, Rock, World, Minimalist
+- **Song structure**: AABA, ABAB, verse-chorus forms with sections
+- **Harmonic progressions**: I-IV-V, ii-V-I, blues, modal interchange
+- **Voice leading**: Smooth transitions between chords following classical rules
+- **Melodic generation**: Stepwise motion, motivic development, variations
+- **Bass lines**: Style-appropriate bass patterns (walking, pedal, arpeggiated)
+- **Emotional integration**: Sections can have emotional qualities that affect synthesis
+- **Full arrangements**: Melody, harmony, bass, pads - all voices working together
+
+### 4. **Integration with SynthNN Core**
+
+These musical features integrate seamlessly with SynthNN's resonant network architecture:
+
+- Musical nodes are resonant nodes with synthesis capabilities
+- Networks can represent chord progressions and harmonic relationships
+- Phase coupling creates natural musical synchronization
+- Emotional resonance affects timbre and dynamics
+- Evolutionary algorithms can optimize for musical fitness
+
+### Example Usage:
+
+```python
+# Create a jazz composition
+composer = CompositionEngine(style=MusicalStyle.JAZZ, base_tempo=140)
+composer.create_structure("AABA", section_measures=8)
+composer.generate_harmonic_progression(HarmonicProgression.ii_V_I, 32)
+composer.generate_melody(32, notes_per_measure=8)
+audio = composer.render_composition(duration=60.0)
+
+# Create a drum groove
+rhythm = RhythmEngine(tempo=120)
+rhythm.activate_pattern('funk_kick', DrumVoice.KICK)
+rhythm.activate_pattern('jazz_ride', DrumVoice.RIDE)
+groove = rhythm.grooves['swing']  # Apply swing feel
+```
+
+This brings SynthNN much closer to systems like Suno in terms of musical richness while maintaining our unique resonance-based approach. The key differences:
+
+- **Suno**: Data-driven, learns from massive datasets
+- **SynthNN**: Physics/theory-driven, uses musical principles and resonance
+
+---
+
 ## 🎯 Real-World Applications
 
 ### 🎵 **Music & Audio**

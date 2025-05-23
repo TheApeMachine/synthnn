@@ -34,7 +34,9 @@ from synthnn.core.emotional_resonance import EmotionalResonanceEngine, EmotionCa
 from synthnn.core import (
     ResonanceField4D, SpatialResonantNode, BoundaryCondition,
     CollectiveIntelligence, CommunicationMode, ConsensusMethod, NetworkRole,
-    EvolutionaryResonance, FitnessMetric
+    EvolutionaryResonance, FitnessMetric,
+    AudioCleanupEngine, ArtifactDetector, create_cleanup_pipeline,
+    CompositionEngine, MusicalStyle
 )
 # Import for Multimodal Demo
 from synthnn.core import TextPatternEncoder, ImagePatternEncoder, AudioPatternEncoder # Assuming AudioPatternEncoder exists or will be created
@@ -435,7 +437,7 @@ class SynthNNDemo:
         network = st.session_state.network
         
         # Create tabs
-        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional, tab_4d_field, tab_collective, tab_evolution = st.tabs([
+        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional, tab_4d_field, tab_collective, tab_evolution, tab_audio_cleanup = st.tabs([
             "🎼 Music Generation", 
             "📊 Network Visualization", 
             "🔬 Analysis",
@@ -445,7 +447,8 @@ class SynthNNDemo:
             "💖 Emotional Resonance",
             "🌊 4D Resonance Fields",  # New Tab
             "🧠 Collective Intelligence",  # New Tab
-            "🧬 Evolutionary Resonance"  # New Tab
+            "🧬 Evolutionary Resonance",  # New Tab
+            "🧹 Audio Cleanup"  # New Tab
         ])
 
         with tab_music_gen:
@@ -2258,6 +2261,520 @@ def evolutionary_resonance_demo():
                         st.write(f"Max Fitness: {info['max_fitness']:.3f}")
                         st.write(f"Age: {info['age']} generations")
                         st.write(f"Stagnation: {info['stagnation']} generations")
+
+
+    def render_audio_cleanup_demo(self):
+        """Demo for Audio Cleanup using resonance-based filtering"""
+        st.header("🧹 Audio Cleanup")
+        st.write("Remove artifacts like persistent whistling tones from AI-generated audio using resonance-based filtering!")
+        
+        # Create tabs for different cleanup scenarios
+        cleanup_tabs = st.tabs([
+            "🎵 Test with Generated Audio",
+            "📤 Upload Your Audio",
+            "🔧 Advanced Settings"
+        ])
+        
+        with cleanup_tabs[0]:
+            st.subheader("Test with Generated Audio")
+            st.markdown("""
+            Generate a musical piece with artificial artifacts (like the whistling tones 
+            you hear in Suno-generated audio) and clean them up using SynthNN's 
+            resonance-based approach.
+            """)
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.markdown("### Audio Generation Settings")
+                
+                # Music style
+                music_style = st.selectbox(
+                    "Music Style",
+                    ["AMBIENT", "CLASSICAL", "JAZZ", "ELECTRONIC"],
+                    key="cleanup_music_style"
+                )
+                
+                # Duration
+                duration = st.slider(
+                    "Duration (seconds)",
+                    min_value=1.0,
+                    max_value=10.0,
+                    value=3.0,
+                    step=0.5,
+                    key="cleanup_duration"
+                )
+                
+                # Artifact types
+                st.markdown("### Artifacts to Add")
+                add_whistle = st.checkbox("Persistent Whistle (3750 Hz)", value=True)
+                add_harmonic = st.checkbox("Harmonic Whistle (7500 Hz)", value=True)
+                add_hum = st.checkbox("60 Hz Hum", value=False)
+                add_resonance = st.checkbox("Random Resonance Peak", value=False)
+                
+            with col2:
+                st.markdown("### Artifact Strengths")
+                
+                whistle_strength = 0.0
+                harmonic_strength = 0.0
+                hum_strength = 0.0
+                resonance_strength = 0.0
+                
+                if add_whistle:
+                    whistle_strength = st.slider("Whistle Strength", 0.01, 0.2, 0.05, key="ws")
+                if add_harmonic:
+                    harmonic_strength = st.slider("Harmonic Strength", 0.01, 0.2, 0.03, key="hs")
+                if add_hum:
+                    hum_strength = st.slider("Hum Strength", 0.01, 0.1, 0.02, key="hums")
+                if add_resonance:
+                    resonance_strength = st.slider("Resonance Strength", 0.01, 0.2, 0.04, key="rs")
+                    
+            if st.button("🎼 Generate Audio with Artifacts", key="gen_artifacts"):
+                with st.spinner("Generating clean audio..."):
+                    # Create composition
+                    composer = CompositionEngine(
+                        style=MusicalStyle[music_style],
+                        base_tempo=80 if music_style == "AMBIENT" else 120
+                    )
+                    composer.create_structure("AB", section_measures=2)
+                    progression = composer.generate_harmonic_progression(
+                        composer.structure.total_measures
+                    )
+                    composer.generate_melody(composer.structure.total_measures)
+                    
+                    # Generate clean audio
+                    clean_audio = composer.render_composition(duration)
+                    st.session_state.cleanup_clean_audio = clean_audio
+                    
+                with st.spinner("Adding artifacts..."):
+                    # Add artifacts
+                    sample_rate = 44100
+                    time = np.arange(len(clean_audio)) / sample_rate
+                    noisy_audio = clean_audio.copy()
+                    
+                    if add_whistle:
+                        whistle = whistle_strength * np.sin(2 * np.pi * 3750 * time)
+                        noisy_audio += whistle
+                        
+                    if add_harmonic:
+                        harmonic = harmonic_strength * np.sin(2 * np.pi * 7500 * time)
+                        noisy_audio += harmonic
+                        
+                    if add_hum:
+                        hum = hum_strength * np.sin(2 * np.pi * 60 * time)
+                        noisy_audio += hum
+                        
+                    if add_resonance:
+                        res_freq = np.random.uniform(1000, 2000)
+                        resonance = resonance_strength * np.sin(2 * np.pi * res_freq * time)
+                        noisy_audio += resonance
+                        
+                    # Normalize
+                    noisy_audio = np.clip(noisy_audio, -1, 1)
+                    st.session_state.cleanup_noisy_audio = noisy_audio
+                    
+                st.success("Audio generated with artifacts!")
+                
+            # Show generated audio
+            if hasattr(st.session_state, 'cleanup_noisy_audio'):
+                st.markdown("---")
+                
+                # Audio players
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### Original (with artifacts)")
+                    audio_html = self.create_audio_player(st.session_state.cleanup_noisy_audio)
+                    st.markdown(audio_html, unsafe_allow_html=True)
+                    
+                    # Waveform
+                    fig, ax = plt.subplots(figsize=(6, 2))
+                    time_axis = np.arange(len(st.session_state.cleanup_noisy_audio)) / 44100
+                    ax.plot(time_axis, st.session_state.cleanup_noisy_audio, linewidth=0.5)
+                    ax.set_xlabel("Time (s)")
+                    ax.set_ylabel("Amplitude")
+                    ax.set_title("Waveform (with artifacts)")
+                    ax.grid(True, alpha=0.3)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close()
+                    
+                with col2:
+                    st.markdown("### Artifact Detection")
+                    
+                    # Detect artifacts
+                    detector = ArtifactDetector()
+                    artifacts = detector.detect_whistling(st.session_state.cleanup_noisy_audio)
+                    
+                    if artifacts:
+                        st.write(f"**Found {len(artifacts)} artifacts:**")
+                        for artifact in artifacts:
+                            st.info(
+                                f"• {artifact.artifact_type.value} at "
+                                f"{artifact.frequency:.1f} Hz "
+                                f"(strength: {artifact.strength:.3f})"
+                            )
+                    else:
+                        st.warning("No artifacts detected (try adjusting threshold)")
+                        
+                # Cleanup options
+                st.markdown("---")
+                st.markdown("### Choose Cleanup Method")
+                
+                cleanup_method = st.radio(
+                    "Cleanup Method",
+                    ["Simple (Fast Notch Filtering)",
+                     "Resynthesis (Higher Quality)",
+                     "Adaptive (Learning-based)"],
+                    key="cleanup_method"
+                )
+                
+                if st.button("🧹 Clean Audio", key="clean_audio"):
+                    engine = AudioCleanupEngine()
+                    
+                    with st.spinner(f"Applying {cleanup_method.split()[0].lower()} cleanup..."):
+                        if "Simple" in cleanup_method:
+                            cleaned = engine.cleanup_simple(st.session_state.cleanup_noisy_audio)
+                        elif "Resynthesis" in cleanup_method:
+                            cleaned = engine.cleanup_resynthesis(
+                                st.session_state.cleanup_noisy_audio,
+                                mode="ionian",
+                                preserve_transients=True
+                            )
+                        else:  # Adaptive
+                            # Use clean audio as reference if available
+                            ref = st.session_state.get('cleanup_clean_audio', None)
+                            cleaned = engine.cleanup_adaptive(
+                                st.session_state.cleanup_noisy_audio,
+                                reference_audio=ref
+                            )
+                            
+                    st.session_state.cleanup_cleaned_audio = cleaned
+                    
+                    # Calculate improvement
+                    if hasattr(st.session_state, 'cleanup_clean_audio'):
+                        noise_before = np.mean((st.session_state.cleanup_noisy_audio - 
+                                              st.session_state.cleanup_clean_audio)**2)
+                        noise_after = np.mean((cleaned - 
+                                             st.session_state.cleanup_clean_audio)**2)
+                        improvement = (1 - noise_after/noise_before) * 100
+                        st.success(f"✨ Cleanup complete! Noise reduced by {improvement:.1f}%")
+                    else:
+                        st.success("✨ Cleanup complete!")
+                        
+                # Show cleaned audio
+                if hasattr(st.session_state, 'cleanup_cleaned_audio'):
+                    st.markdown("---")
+                    st.markdown("### Cleaned Audio")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**Before Cleanup**")
+                        audio_html = self.create_audio_player(st.session_state.cleanup_noisy_audio)
+                        st.markdown(audio_html, unsafe_allow_html=True)
+                        
+                    with col2:
+                        st.markdown("**After Cleanup**")
+                        audio_html = self.create_audio_player(st.session_state.cleanup_cleaned_audio)
+                        st.markdown(audio_html, unsafe_allow_html=True)
+                        
+                    with col3:
+                        st.markdown("**Download Cleaned**")
+                        # Create download button
+                        buffer = io.BytesIO()
+                        audio_int16 = (st.session_state.cleanup_cleaned_audio * 32767).astype(np.int16)
+                        wavfile.write(buffer, 44100, audio_int16)
+                        buffer.seek(0)
+                        
+                        st.download_button(
+                            label="💾 Download WAV",
+                            data=buffer,
+                            file_name="cleaned_audio.wav",
+                            mime="audio/wav"
+                        )
+                        
+                    # Spectrum comparison
+                    st.markdown("### Spectrum Analysis")
+                    
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+                    
+                    # Before spectrum
+                    from scipy.fft import fft, fftfreq
+                    
+                    spectrum_before = np.abs(fft(st.session_state.cleanup_noisy_audio))
+                    frequencies = fftfreq(len(st.session_state.cleanup_noisy_audio), 1/44100)
+                    pos_mask = frequencies > 0
+                    
+                    ax1.semilogy(
+                        frequencies[pos_mask][:len(frequencies)//8],
+                        spectrum_before[pos_mask][:len(frequencies)//8],
+                        linewidth=0.5
+                    )
+                    ax1.set_xlabel("Frequency (Hz)")
+                    ax1.set_ylabel("Magnitude")
+                    ax1.set_title("Before Cleanup")
+                    ax1.set_xlim(0, 10000)
+                    ax1.grid(True, alpha=0.3)
+                    
+                    # After spectrum
+                    spectrum_after = np.abs(fft(st.session_state.cleanup_cleaned_audio))
+                    
+                    ax2.semilogy(
+                        frequencies[pos_mask][:len(frequencies)//8],
+                        spectrum_after[pos_mask][:len(frequencies)//8],
+                        linewidth=0.5
+                    )
+                    ax2.set_xlabel("Frequency (Hz)")
+                    ax2.set_ylabel("Magnitude")
+                    ax2.set_title("After Cleanup")
+                    ax2.set_xlim(0, 10000)
+                    ax2.grid(True, alpha=0.3)
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close()
+                    
+        with cleanup_tabs[1]:
+            st.subheader("Upload Your Own Audio")
+            st.markdown("""
+            Upload an audio file with artifacts (like Suno-generated music with whistling tones)
+            and clean it up using SynthNN's resonance-based filtering.
+            """)
+            
+            uploaded_file = st.file_uploader(
+                "Choose an audio file",
+                type=['wav', 'mp3', 'ogg'],
+                key="cleanup_upload"
+            )
+            
+            if uploaded_file is not None:
+                # Load audio
+                try:
+                    # For simplicity, we'll only handle WAV files properly
+                    # For other formats, you'd need additional libraries
+                    if uploaded_file.name.endswith('.wav'):
+                        sample_rate, audio_data = wavfile.read(uploaded_file)
+                        
+                        # Convert to mono if stereo
+                        if len(audio_data.shape) > 1:
+                            audio_data = np.mean(audio_data, axis=1)
+                            
+                        # Normalize to [-1, 1]
+                        audio_data = audio_data.astype(np.float32)
+                        audio_data = audio_data / np.max(np.abs(audio_data))
+                        
+                        st.session_state.uploaded_audio = audio_data
+                        st.session_state.uploaded_sample_rate = sample_rate
+                        
+                        st.success(f"Loaded audio: {len(audio_data)/sample_rate:.1f} seconds at {sample_rate} Hz")
+                        
+                        # Show original
+                        st.markdown("### Original Audio")
+                        st.audio(uploaded_file)
+                        
+                        # Detect artifacts
+                        st.markdown("### Artifact Analysis")
+                        
+                        detector = ArtifactDetector(sample_rate)
+                        artifacts = detector.detect_whistling(audio_data, threshold=0.05)
+                        
+                        if artifacts:
+                            st.write(f"**Detected {len(artifacts)} potential artifacts:**")
+                            for i, artifact in enumerate(artifacts[:5]):  # Show max 5
+                                st.warning(
+                                    f"• {artifact.artifact_type.value} at "
+                                    f"{artifact.frequency:.1f} Hz "
+                                    f"(persistence: {artifact.phase_coherence:.2f})"
+                                )
+                            if len(artifacts) > 5:
+                                st.info(f"... and {len(artifacts) - 5} more")
+                        else:
+                            st.info("No obvious artifacts detected, but you can still apply cleanup.")
+                            
+                        # Cleanup
+                        cleanup_type = st.selectbox(
+                            "Select Cleanup Method",
+                            ["Simple", "Resynthesis", "Adaptive"],
+                            key="upload_cleanup_type"
+                        )
+                        
+                        if st.button("🧹 Clean Uploaded Audio", key="clean_uploaded"):
+                            engine = AudioCleanupEngine(sample_rate)
+                            
+                            with st.spinner("Cleaning audio..."):
+                                if cleanup_type == "Simple":
+                                    cleaned = engine.cleanup_simple(audio_data)
+                                elif cleanup_type == "Resynthesis":
+                                    cleaned = engine.cleanup_resynthesis(audio_data)
+                                else:
+                                    cleaned = engine.cleanup_adaptive(audio_data)
+                                    
+                            st.session_state.uploaded_cleaned = cleaned
+                            st.success("Audio cleaned successfully!")
+                            
+                        # Show results
+                        if hasattr(st.session_state, 'uploaded_cleaned'):
+                            st.markdown("### Cleaned Audio")
+                            
+                            # Convert back to int16 for playback
+                            cleaned_int16 = (st.session_state.uploaded_cleaned * 32767).astype(np.int16)
+                            
+                            # Create download
+                            buffer = io.BytesIO()
+                            wavfile.write(buffer, sample_rate, cleaned_int16)
+                            buffer.seek(0)
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.audio(buffer, format='audio/wav')
+                                
+                            with col2:
+                                st.download_button(
+                                    label="💾 Download Cleaned Audio",
+                                    data=buffer,
+                                    file_name=f"cleaned_{uploaded_file.name}",
+                                    mime="audio/wav"
+                                )
+                                
+                    else:
+                        st.error("Currently only WAV files are supported. Please convert your audio to WAV format.")
+                        
+                except Exception as e:
+                    st.error(f"Error loading audio: {str(e)}")
+                    
+        with cleanup_tabs[2]:
+            st.subheader("Advanced Cleanup Settings")
+            st.markdown("""
+            Fine-tune the cleanup parameters for optimal results.
+            """)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Detection Settings")
+                
+                detection_threshold = st.slider(
+                    "Artifact Detection Threshold",
+                    min_value=0.01,
+                    max_value=0.5,
+                    value=0.1,
+                    step=0.01,
+                    help="Lower values detect more artifacts",
+                    key="det_threshold"
+                )
+                
+                persistence_threshold = st.slider(
+                    "Persistence Threshold",
+                    min_value=0.5,
+                    max_value=0.95,
+                    value=0.7,
+                    step=0.05,
+                    help="How consistently an artifact must appear",
+                    key="pers_threshold"
+                )
+                
+                st.markdown("### Filtering Settings")
+                
+                notch_bandwidth = st.slider(
+                    "Notch Filter Bandwidth (Hz)",
+                    min_value=10.0,
+                    max_value=200.0,
+                    value=50.0,
+                    step=10.0,
+                    key="notch_bw"
+                )
+                
+                preserve_transients = st.checkbox(
+                    "Preserve Transients",
+                    value=True,
+                    help="Keep drum hits and attacks intact",
+                    key="preserve_trans"
+                )
+                
+            with col2:
+                st.markdown("### Resynthesis Settings")
+                
+                mode_enforcement = st.selectbox(
+                    "Mode Enforcement",
+                    ["None", "ionian", "dorian", "phrygian", "lydian", 
+                     "mixolydian", "aeolian", "locrian"],
+                    help="Force output to conform to a musical mode",
+                    key="mode_enforce"
+                )
+                
+                harmonic_threshold = st.slider(
+                    "Harmonic Detection Threshold",
+                    min_value=0.0,
+                    max_value=0.5,
+                    value=0.1,
+                    step=0.01,
+                    help="Threshold for detecting harmonic relationships",
+                    key="harm_thresh"
+                )
+                
+                st.markdown("### Adaptive Settings")
+                
+                learning_rate = st.slider(
+                    "Adaptive Learning Rate",
+                    min_value=0.001,
+                    max_value=0.1,
+                    value=0.01,
+                    step=0.001,
+                    format="%.3f",
+                    help="How quickly the system adapts to reference audio",
+                    key="adapt_lr"
+                )
+                
+                reference_influence = st.slider(
+                    "Reference Influence",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.5,
+                    step=0.1,
+                    help="How much the reference audio influences cleanup",
+                    key="ref_influence"
+                )
+                
+            # Pipeline builder
+            st.markdown("---")
+            st.markdown("### Custom Cleanup Pipeline")
+            st.markdown("Create a reusable cleanup pipeline with your settings.")
+            
+            pipeline_name = st.text_input(
+                "Pipeline Name",
+                value="My Custom Cleanup",
+                key="pipeline_name"
+            )
+            
+            if st.button("💾 Save Pipeline Configuration", key="save_pipeline"):
+                # Store configuration
+                config = {
+                    'name': pipeline_name,
+                    'detection_threshold': detection_threshold,
+                    'persistence_threshold': persistence_threshold,
+                    'notch_bandwidth': notch_bandwidth,
+                    'preserve_transients': preserve_transients,
+                    'mode_enforcement': mode_enforcement if mode_enforcement != "None" else None,
+                    'harmonic_threshold': harmonic_threshold,
+                    'learning_rate': learning_rate,
+                    'reference_influence': reference_influence
+                }
+                
+                if 'cleanup_pipelines' not in st.session_state:
+                    st.session_state.cleanup_pipelines = {}
+                    
+                st.session_state.cleanup_pipelines[pipeline_name] = config
+                st.success(f"Pipeline '{pipeline_name}' saved!")
+                
+            # Show saved pipelines
+            if hasattr(st.session_state, 'cleanup_pipelines') and st.session_state.cleanup_pipelines:
+                st.markdown("### Saved Pipelines")
+                
+                for name, config in st.session_state.cleanup_pipelines.items():
+                    with st.expander(name):
+                        st.json(config)
 
 
 if __name__ == "__main__":

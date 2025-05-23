@@ -43,6 +43,10 @@ from .composition_engine import (
     CompositionEngine, MusicalStyle, HarmonicProgression,
     SectionStructure, CompositionStructure, VoiceLeading, MelodicGenerator
 )
+from .audio_cleanup import (
+    AudioCleanupEngine, ArtifactDetector, ResonanceFilter,
+    ArtifactType, ArtifactProfile, create_cleanup_pipeline
+)
 
 __all__ = [
     'ResonantNode',
@@ -95,7 +99,13 @@ __all__ = [
     'SectionStructure',
     'CompositionStructure',
     'VoiceLeading',
-    'MelodicGenerator'
+    'MelodicGenerator',
+    'AudioCleanupEngine',
+    'ArtifactDetector',
+    'ResonanceFilter',
+    'ArtifactType',
+    'ArtifactProfile',
+    'create_cleanup_pipeline'
 ]
 
 __version__ = '0.1.0' 

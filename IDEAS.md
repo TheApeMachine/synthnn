@@ -1,5 +1,26 @@
 # IDEAS
 
+## 🧹 Audio Cleanup Implemented
+
+We've implemented a comprehensive audio cleanup system based on the resonance principles to remove artifacts from AI-generated audio (like persistent whistling tones from Suno):
+
+### **Audio Cleanup Engine** (`audio_cleanup.py`)
+
+- **Artifact Detection**: Automatically detects whistling tones, hum, and non-harmonic artifacts
+- **Resonance-based Filtering**: Uses damped resonators as notch filters
+- **Resynthesis Cleanup**: Encodes audio to resonant patterns, filters in that domain, then resynthesizes
+- **Adaptive Learning**: Can learn from clean reference audio to better target artifacts
+- **Mode Enforcement**: Ensures cleaned audio conforms to musical modes/scales
+- **Transient Preservation**: Keeps drum hits and attacks intact while removing tonal artifacts
+
+### Three Cleanup Approaches:
+
+1. **Simple**: Fast notch filtering at detected artifact frequencies
+2. **Resynthesis**: Complete resynthesize through resonant network (best quality)
+3. **Adaptive**: Learns from clean examples to optimize cleanup
+
+This addresses the exact problem mentioned - those persistent whistling tones in Suno-generated audio can now be detected and removed while preserving the musical content!
+
 ## 🎵 Musical Enhancements Implemented
 
 We've significantly enhanced SynthNN's musical capabilities to create richer, more expressive audio:
