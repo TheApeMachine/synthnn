@@ -8,24 +8,30 @@ Demonstrates the enhanced musical capabilities including:
 - Complete composition system with structure and emotion
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
 import os
 
-from synthnn.core import (
-    # Musical synthesis
+from synthnn.core.musical_synthesis import (
     MusicalNode, MusicalResonantNetwork, MusicalSynthesizer,
     WaveShape, FilterType, ADSREnvelope,
-    
-    # Rhythm
+)
+
+from synthnn.core.rhythm_engine import (
     RhythmEngine, RhythmPattern, GrooveTemplate, DrumVoice,
     TimeSignature,
-    
-    # Composition
+)
+
+from synthnn.core.composition_engine import (
     CompositionEngine, MusicalStyle, HarmonicProgression,
-    
-    # Emotion
+)
+
+from synthnn.core.emotional_resonance import (
     EmotionalResonanceEngine, EmotionCategory
 )
 

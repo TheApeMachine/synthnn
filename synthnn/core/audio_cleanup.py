@@ -16,7 +16,8 @@ from .resonant_node import ResonantNode
 from .resonant_network import ResonantNetwork
 from .signal_processor import SignalProcessor
 from .pattern_codec import AudioPatternEncoder, AudioPatternDecoder
-from .musical_extensions import MusicalResonantNetwork, ModeDetector
+from .musical_extensions import MusicalResonantNetwork
+from applications.detector import ModeDetector
 from .accelerated_musical_network import AcceleratedMusicalNetwork
 
 
