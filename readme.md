@@ -1,6 +1,6 @@
 # SynthNN: Resonant Neural Networks
 
-*An AI Framework Based on Wave Physics and Resonance*
+_An AI Framework Based on Wave Physics and Resonance_
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -20,14 +20,14 @@ Think of it as **neural networks that sing**.
 # Traditional Neural Network
 output = activation(weights @ inputs + bias)
 
-# SynthNN Resonant Network  
+# SynthNN Resonant Network
 output = Σ(amplitude_i * sin(2π * frequency_i * time + phase_i))
 # Where phases couple through: phase_coupling = Σ(weight_ij * sin(phase_j - phase_i))
 ```
 
 ---
 
-## 🚀 Revolutionary Features
+## 🚀 Features
 
 ### 🧠 **Biologically Plausible Architecture**
 
@@ -66,46 +66,46 @@ output = Σ(amplitude_i * sin(2π * frequency_i * time + phase_i))
 ┌─────────────────────────────────────────────────────────────┐
 │                        SynthNN Core                         │
 ├─────────────────────────────────────────────────────────────┤
-│  ResonantNode: Oscillating computational units             │
-│  ├─ Frequency, Phase, Amplitude                            │
-│  ├─ Damping and Energy dynamics                            │
-│  └─ Adaptive retuning capabilities                         │
+│  ResonantNode: Oscillating computational units              │
+│  ├─ Frequency, Phase, Amplitude                             │
+│  ├─ Damping and Energy dynamics                             │
+│  └─ Adaptive retuning capabilities                          │
 │                                                             │
-│  ResonantNetwork: Phase-coupled node collections           │
-│  ├─ Kuramoto-style synchronization                         │
-│  ├─ Connection weights and delays                          │
-│  ├─ Emergent behavior analysis                             │
-│  └─ NetworkX integration for graph analysis               │
+│  ResonantNetwork: Phase-coupled node collections            │
+│  ├─ Kuramoto-style synchronization                          │
+│  ├─ Connection weights and delays                           │
+│  ├─ Emergent behavior analysis                              │
+│  └─ NetworkX integration for graph analysis                 │
 │                                                             │
-│  UniversalPatternCodec: Multi-modal translation           │
-│  ├─ Audio ↔ Resonant patterns                             │
-│  ├─ Text ↔ Frequency mappings                             │
-│  ├─ Images ↔ Spatial resonance                            │
-│  └─ Cross-modal learning                                   │
+│  UniversalPatternCodec: Multi-modal translation             │
+│  ├─ Audio ↔ Resonant patterns                               │
+│  ├─ Text ↔ Frequency mappings                               │
+│  ├─ Images ↔ Spatial resonance                              │
+│  └─ Cross-modal learning                                    │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
-│                   Performance Layer                        │
+│                   Performance Layer                         │
 ├─────────────────────────────────────────────────────────────┤
-│  Backend Manager: Automatic acceleration                   │
-│  ├─ CPU: Optimized NumPy/SciPy                            │
-│  ├─ CUDA: NVIDIA GPU acceleration via CuPy/PyTorch        │
-│  ├─ Metal: Apple Silicon acceleration via MLX             │
-│  └─ Automatic device detection and selection              │
+│  Backend Manager: Automatic acceleration                    │
+│  ├─ CPU: Optimized NumPy/SciPy                              │
+│  ├─ CUDA: NVIDIA GPU acceleration via CuPy/PyTorch          │
+│  ├─ Metal: Apple Silicon acceleration via MLX               │
+│  └─ Automatic device detection and selection                │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
-│                 Application Modules                        │
+│                 Application Modules                         │
 ├─────────────────────────────────────────────────────────────┤
-│  Musical Extensions: Advanced music generation             │
-│  ├─ Mode detection and adaptive retuning                   │
-│  ├─ Microtonal systems and cultural scales                 │
-│  ├─ Chord progressions and harmonic analysis               │
-│  └─ Real-time interactive performance                      │
+│  Musical Extensions: Advanced music generation              │
+│  ├─ Mode detection and adaptive retuning                    │
+│  ├─ Microtonal systems and cultural scales                  │
+│  ├─ Chord progressions and harmonic analysis                │
+│  └─ Real-time interactive performance                       │
 │                                                             │
-│  Emotional Resonance: Emotion-aware AI                     │
-│  ├─ Emotion-to-frequency mapping                           │
-│  ├─ Empathetic response generation                         │
-│  ├─ Cross-cultural emotion recognition                     │
-│  └─ Therapeutic soundscape creation                        │
+│  Emotional Resonance: Emotion-aware AI                      │
+│  ├─ Emotion-to-frequency mapping                            │
+│  ├─ Empathetic response generation                          │
+│  ├─ Cross-cultural emotion recognition                      │
+│  └─ Therapeutic soundscape creation                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -184,7 +184,7 @@ network.create_harmonic_nodes([1, 1.2, 1.5, 1.8, 2.0, 2.4])
 # Generate a chord progression
 chords = [
     [1.0, 1.25, 1.5],     # Major triad
-    [1.0, 1.2, 1.5],      # Minor triad  
+    [1.0, 1.2, 1.5],      # Minor triad
     [1.0, 1.25, 1.5, 1.875], # Major 7th
     [1.0, 1.5, 2.0]       # Perfect fifth octave
 ]
@@ -206,7 +206,7 @@ streamlit run demos/streamlit_app.py
 **Features:**
 
 - 🎵 **Real-time music generation** with parameter control
-- 📊 **Network visualization** and synchronization analysis  
+- 📊 **Network visualization** and synchronization analysis
 - 🌍 **Microtonal exploration** with cultural scales
 - 👁️‍🗨️ **Multi-modal playground** for cross-modal translation
 - 💖 **Emotional resonance engine** for emotion-aware AI
@@ -263,14 +263,14 @@ python main.py --shell
 
 ## 📊 Performance Benchmarks
 
-| Operation | CPU (Intel i7) | NVIDIA RTX 4090 | Apple M2 Ultra |
-|-----------|----------------|------------------|----------------|
-| 1000-node network step | 45ms | 3ms (15x) | 4ms (11x) |
-| Audio generation (10s) | 2.1s | 0.15s (14x) | 0.19s (11x) |
-| Cross-modal translation | 890ms | 67ms (13x) | 71ms (12x) |
-| Synchronization analysis | 120ms | 12ms (10x) | 15ms (8x) |
+| Operation                | CPU (Intel i7) | NVIDIA RTX 4090 | Apple M2 Ultra |
+| ------------------------ | -------------- | --------------- | -------------- |
+| 1000-node network step   | 45ms           | 3ms (15x)       | 4ms (11x)      |
+| Audio generation (10s)   | 2.1s           | 0.15s (14x)     | 0.19s (11x)    |
+| Cross-modal translation  | 890ms          | 67ms (13x)      | 71ms (12x)     |
+| Synchronization analysis | 120ms          | 12ms (10x)      | 15ms (8x)      |
 
-*Benchmarks on networks with 1000+ nodes generating 44.1kHz audio*
+_Benchmarks on networks with 1000+ nodes generating 44.1kHz audio_
 
 ---
 
@@ -319,7 +319,7 @@ SynthNN is grounded in rigorous scientific principles:
 - **Resonance theory**: Natural frequency matching and amplification
 - **Non-linear dynamics**: Emergent behavior and bifurcations
 
-### **Music Theory**  
+### **Music Theory**
 
 - **Harmonic series**: Natural frequency relationships
 - **Microtonal systems**: Cultural and mathematical tuning systems
@@ -355,7 +355,7 @@ python examples/performance_demo.py
 We welcome contributions! Areas where help is especially valuable:
 
 - 🧠 **Neuroscience integration**: EEG/brain signal processing
-- 🎵 **Music theory**: Advanced harmonic analysis and generation  
+- 🎵 **Music theory**: Advanced harmonic analysis and generation
 - ⚡ **Performance optimization**: GPU kernels and parallel algorithms
 - 🌐 **Applications**: Novel use cases and domain-specific extensions
 - 📖 **Documentation**: Tutorials, examples, and theoretical explanations
@@ -385,56 +385,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - [ ] **Artificial consciousness** through global synchronization studies
 - [ ] **Universal translation** between any sensory modalities
 - [ ] **Ecosystem monitoring** via environmental resonance networks
-- [ ] **Space exploration** with adaptive communication systems
-
----
-
-## 📄 Citation & License
-
-If you use SynthNN in your research, please cite:
-
-```bibtex
-@software{synthnn2024,
-  title={SynthNN: Synthetic Resonant Neural Networks},
-  author={The Ape Machine},
-  year={2024},
-  url={https://github.com/theapemachine/synthnn},
-  note={A revolutionary AI framework based on wave physics and resonance}
-}
-```
-
-**License:** MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## 🤝 Community & Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/theapemachine/synthnn/issues)
-- **Discussions**: [Join the community](https://github.com/theapemachine/synthnn/discussions)
-- **Discord**: [Real-time chat and collaboration](https://discord.gg/synthnn) *(coming soon)*
-- **Twitter**: [@synthnn_ai](https://twitter.com/synthnn_ai) *(coming soon)*
-
----
-
-## 🎉 Acknowledgments
-
-SynthNN was inspired by and builds upon decades of research in:
-
-- **Neuroscience**: Neural oscillations and synchronization studies
-- **Physics**: Non-linear dynamics and complex systems theory  
-- **Music Theory**: Harmonic analysis and microtonal systems
-- **Computer Science**: Emergent computation and swarm intelligence
-
-Special thanks to the open-source community and researchers whose work made this possible.
-
----
-
-<div align="center">
-
-**🌊 Join the Resonance Revolution 🌊**
-
-*Moving AI from discrete computation to continuous harmony*
-
-[**Get Started**](#-quick-start) • [**Try the Demo**](#-interactive-demos) • [**Read the Docs**](#-documentation--examples) • [**Contribute**](#-development--contributing)
-
-</div>

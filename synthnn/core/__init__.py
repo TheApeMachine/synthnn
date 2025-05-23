@@ -31,6 +31,18 @@ from .emotional_resonance import EmotionalResonanceEngine, EmotionCategory
 from .resonance_field import ResonanceField4D, SpatialResonantNode, BoundaryCondition
 from .collective_intelligence import CollectiveIntelligence, CommunicationMode, ConsensusMethod, NetworkRole
 from .evolutionary_resonance import EvolutionaryResonance, FitnessMetric, Genome, Species
+from .musical_synthesis import (
+    MusicalNode, MusicalResonantNetwork, MusicalSynthesizer,
+    WaveShape, FilterType, ADSREnvelope, Oscillator, Filter
+)
+from .rhythm_engine import (
+    RhythmEngine, RhythmPattern, GrooveTemplate, DrumVoice,
+    TimeSignature, DrumKit
+)
+from .composition_engine import (
+    CompositionEngine, MusicalStyle, HarmonicProgression,
+    SectionStructure, CompositionStructure, VoiceLeading, MelodicGenerator
+)
 
 __all__ = [
     'ResonantNode',
@@ -63,7 +75,27 @@ __all__ = [
     'EvolutionaryResonance',
     'FitnessMetric',
     'Genome',
-    'Species'
+    'Species',
+    'MusicalNode',
+    'MusicalSynthesizer',
+    'WaveShape',
+    'FilterType',
+    'ADSREnvelope',
+    'Oscillator',
+    'Filter',
+    'RhythmEngine',
+    'RhythmPattern',
+    'GrooveTemplate',
+    'DrumVoice',
+    'TimeSignature',
+    'DrumKit',
+    'CompositionEngine',
+    'MusicalStyle',
+    'HarmonicProgression',
+    'SectionStructure',
+    'CompositionStructure',
+    'VoiceLeading',
+    'MelodicGenerator'
 ]
 
 __version__ = '0.1.0' 
