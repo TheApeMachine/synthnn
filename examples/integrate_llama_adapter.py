@@ -59,8 +59,8 @@ def attach_synthnn_adapter_to_llama_layer(llama_layer, synthnn_adapter_instance)
 
 if __name__ == '__main__':
     # model_name = "meta-llama/Llama-3.2-1B"
-    model_name = "NousResearch/Llama-2-7b-chat-hf" # Example for another model
-    # model_name = "gpt2" # For a much smaller model for quick testing if Llama access is an issue
+    # model_name = "NousResearch/Llama-2-7b-chat-hf" # Example for another model
+    model_name = "gpt2" # For a much smaller model for quick testing if Llama access is an issue
 
     print(f"Loading tokenizer and model for {model_name}...")
     try:
