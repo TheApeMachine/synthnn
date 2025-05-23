@@ -328,20 +328,22 @@ class ResonanceField4D:
                         
     def measure_field_energy(self) -> float:
         """Calculate total energy in the field."""
-        kinetic = 0.5 * self.medium['density'] * np.sum(
-            (self.amplitude_field - self.amplitude_prev)**2
-        ) / self.dt**2
+        # Kinetic energy: (1/2) * density * (du/dt)²
+        time_derivative = (self.amplitude_field - self.amplitude_prev) / self.dt
+        kinetic = 0.5 * np.sum(self.medium['density'] * time_derivative**2)
         
         # Potential energy from spatial gradients
         grad_x = np.gradient(self.amplitude_field, axis=0)
         grad_y = np.gradient(self.amplitude_field, axis=1)
         grad_z = np.gradient(self.amplitude_field, axis=2)
         
-        potential = 0.5 * self.wave_speed**2 * np.sum(
-            grad_x**2 + grad_y**2 + grad_z**2
-        )
+        # Sum of squared gradients
+        grad_squared = grad_x**2 + grad_y**2 + grad_z**2
+        potential = 0.5 * self.wave_speed**2 * np.sum(grad_squared)
         
-        return kinetic + potential
+        # Return as Python float
+        total_energy = kinetic + potential
+        return float(total_energy.item() if hasattr(total_energy, 'item') else total_energy)
         
     def find_resonant_modes(self, frequency_range: Tuple[float, float],
                            num_modes: int = 10) -> List[Dict]:

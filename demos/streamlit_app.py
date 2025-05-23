@@ -31,6 +31,11 @@ from synthnn.core.microtonal_extensions import (
     MicrotonalScale  # Added MicrotonalScale for type hinting if needed
 )
 from synthnn.core.emotional_resonance import EmotionalResonanceEngine, EmotionCategory
+from synthnn.core import (
+    ResonanceField4D, SpatialResonantNode, BoundaryCondition,
+    CollectiveIntelligence, CommunicationMode, ConsensusMethod, NetworkRole,
+    EvolutionaryResonance, FitnessMetric
+)
 # Import for Multimodal Demo
 from synthnn.core import TextPatternEncoder, ImagePatternEncoder, AudioPatternEncoder # Assuming AudioPatternEncoder exists or will be created
 # We might need to define a simplified version or parts of MultiModalResonantSystem here or import it if it becomes a standalone utility
@@ -430,14 +435,17 @@ class SynthNNDemo:
         network = st.session_state.network
         
         # Create tabs
-        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional = st.tabs([
+        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional, tab_4d_field, tab_collective, tab_evolution = st.tabs([
             "🎼 Music Generation", 
             "📊 Network Visualization", 
             "🔬 Analysis",
             "🎮 Interactive Control",
             "🌍 Microtonal Exploration",
             "👁️‍🗨️ Multimodal Playground",
-            "💖 Emotional Resonance"  # New Tab
+            "💖 Emotional Resonance",
+            "🌊 4D Resonance Fields",  # New Tab
+            "🧠 Collective Intelligence",  # New Tab
+            "🧬 Evolutionary Resonance"  # New Tab
         ])
 
         with tab_music_gen:
@@ -631,6 +639,16 @@ class SynthNNDemo:
             """)
             
             self.render_emotional_resonance_demo()
+
+        # New Advanced Features Tabs
+        with tab_4d_field:
+            resonance_field_4d_demo()
+
+        with tab_collective:
+            collective_intelligence_demo()
+
+        with tab_evolution:
+            evolutionary_resonance_demo()
 
         # Footer
         st.markdown("---")
@@ -1899,6 +1917,347 @@ class SynthNNDemo:
                         st.markdown(f"### {cultural_context.title() if cultural_context != 'None' else 'Base'} Expression")
                         audio_html = self.create_audio_player(audio_cultural)
                         st.markdown(audio_html, unsafe_allow_html=True)
+
+
+def resonance_field_4d_demo():
+    """Demo for 4D Resonance Fields"""
+    st.header("🌊 4D Resonance Fields")
+    st.write("Explore wave propagation in 3D space + time!")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Field Parameters")
+        
+        # Field dimensions
+        field_size = st.slider("Field Size", 10, 50, 20)
+        wave_speed = st.slider("Wave Speed", 10.0, 500.0, 100.0)
+        
+        # Boundary conditions
+        boundary = st.selectbox(
+            "Boundary Condition",
+            ["ABSORBING", "REFLECTING", "PERIODIC", "RADIATING"]
+        )
+        
+        # Add nodes
+        st.subheader("Add Spatial Nodes")
+        num_nodes = st.number_input("Number of Nodes", 1, 10, 3)
+        
+        if st.button("Create Field"):
+            with st.spinner("Creating 4D resonance field..."):
+                # Create field
+                field = ResonanceField4D(
+                    dimensions=(field_size, field_size, field_size),
+                    resolution=1.0,
+                    wave_speed=wave_speed,
+                    boundary_condition=BoundaryCondition[boundary]
+                )
+                
+                # Add random nodes
+                for i in range(num_nodes):
+                    pos = np.random.rand(3) * field_size
+                    freq = np.random.uniform(1.0, 5.0)
+                    node = SpatialResonantNode(
+                        f"node_{i}",
+                        position=pos,
+                        frequency=freq,
+                        amplitude=1.0,
+                        radiation_pattern="omnidirectional"
+                    )
+                    field.add_spatial_node(node)
+                
+                # Store in session state
+                st.session_state.resonance_field = field
+                
+    with col2:
+        if hasattr(st.session_state, 'resonance_field'):
+            field = st.session_state.resonance_field
+            
+            # Simulate steps
+            steps = st.slider("Simulation Steps", 0, 200, 50)
+            
+            if st.button("Simulate"):
+                progress_bar = st.progress(0)
+                
+                # Run simulation
+                for i in range(steps):
+                    field.step()
+                    progress_bar.progress((i + 1) / steps)
+                
+                # Visualize results
+                st.subheader("Field Visualization")
+                
+                # Get slices
+                slice_axis = st.selectbox("Slice Axis", ["x", "y", "z"])
+                slice_idx = st.slider("Slice Position", 0, field.dimensions[0]-1, field.dimensions[0]//2)
+                
+                field_slice = field.extract_slice(slice_axis, slice_idx)
+                
+                # Plot
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                
+                # Amplitude field
+                im1 = ax1.imshow(field_slice, cmap='seismic', vmin=-1, vmax=1)
+                ax1.set_title(f"Amplitude Field ({slice_axis}={slice_idx})")
+                plt.colorbar(im1, ax=ax1)
+                
+                # Field statistics
+                stats = field.get_field_statistics()
+                ax2.text(0.1, 0.8, f"Total Energy: {stats['total_energy']:.2e}", fontsize=12)
+                ax2.text(0.1, 0.6, f"Max Amplitude: {stats['max_amplitude']:.3f}", fontsize=12)
+                ax2.text(0.1, 0.4, f"Coherence: {stats['coherence']:.3f}", fontsize=12)
+                ax2.text(0.1, 0.2, f"Entropy: {stats['entropy']:.2f}", fontsize=12)
+                ax2.set_xlim(0, 1)
+                ax2.set_ylim(0, 1)
+                ax2.axis('off')
+                ax2.set_title("Field Statistics")
+                
+                st.pyplot(fig)
+                plt.close()
+
+
+def collective_intelligence_demo():
+    """Demo for Collective Intelligence"""
+    st.header("🧠 Collective Intelligence")
+    st.write("Watch multiple networks work together to make decisions!")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Collective Setup")
+        
+        # Communication mode
+        comm_mode = st.selectbox(
+            "Communication Mode",
+            ["PHASE_COUPLING", "FREQUENCY_MODULATION", "DIRECT"]
+        )
+        
+        # Consensus method
+        consensus = st.selectbox(
+            "Consensus Method",
+            ["SYNCHRONIZATION", "VOTING", "EMERGENCE", "HIERARCHICAL"]
+        )
+        
+        # Number of networks
+        num_networks = st.slider("Number of Networks", 2, 8, 4)
+        
+        if st.button("Create Collective"):
+            with st.spinner("Creating collective intelligence..."):
+                # Create collective
+                collective = CollectiveIntelligence(
+                    name="demo_collective",
+                    communication_mode=CommunicationMode[comm_mode],
+                    consensus_method=ConsensusMethod[consensus]
+                )
+                
+                # Add specialized networks
+                roles = ["sensor", "processor", "memory", "decision", "coordinator", "analyzer", "integrator", "output"]
+                
+                for i in range(num_networks):
+                    # Create network
+                    network = ResonantNetwork(f"network_{i}")
+                    
+                    # Add nodes
+                    for j in range(5):
+                        node = ResonantNode(
+                            f"n{i}_{j}",
+                            frequency=1.0 + i*0.5 + j*0.1,
+                            damping=0.05
+                        )
+                        network.add_node(node)
+                    
+                    # Connect nodes (ring topology)
+                    for j in range(5):
+                        network.connect(f"n{i}_{j}", f"n{i}_{(j+1)%5}")
+                    
+                    # Create role
+                    role = NetworkRole(
+                        name=roles[i % len(roles)],
+                        frequency_band=(1.0 + i*0.5, 2.0 + i*0.5),
+                        influence_weight=1.0 + i*0.2,
+                        receptivity=0.8,
+                        specialization=roles[i % len(roles)]
+                    )
+                    
+                    collective.add_network(f"net_{i}", network, role)
+                
+                # Connect networks
+                for i in range(num_networks-1):
+                    collective.connect_networks(f"net_{i}", f"net_{i+1}")
+                
+                st.session_state.collective = collective
+                
+    with col2:
+        if hasattr(st.session_state, 'collective'):
+            collective = st.session_state.collective
+            
+            st.subheader("Collective Dynamics")
+            
+            # Run simulation
+            sim_steps = st.slider("Simulation Steps", 10, 500, 100)
+            
+            if st.button("Run Collective"):
+                progress_bar = st.progress(0)
+                sync_history = []
+                
+                for i in range(sim_steps):
+                    collective.step(0.01)
+                    if i % 10 == 0:
+                        sync_history.append(collective.synchronization_index)
+                    progress_bar.progress((i + 1) / sim_steps)
+                
+                # Visualize
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                
+                # Synchronization over time
+                ax1.plot(sync_history, linewidth=2)
+                ax1.set_xlabel("Time Steps (x10)")
+                ax1.set_ylabel("Synchronization Index")
+                ax1.set_title("Collective Synchronization")
+                ax1.grid(True, alpha=0.3)
+                
+                # Network states
+                viz_data = collective.visualize_collective_state()
+                networks = list(viz_data['networks'].keys())
+                freqs = [viz_data['networks'][n]['mean_frequency'] for n in networks]
+                syncs = [viz_data['networks'][n]['synchronization'] for n in networks]
+                
+                x = np.arange(len(networks))
+                width = 0.35
+                
+                ax2.bar(x - width/2, freqs, width, label='Mean Frequency')
+                ax2.bar(x + width/2, syncs, width, label='Synchronization')
+                ax2.set_xlabel("Network")
+                ax2.set_ylabel("Value")
+                ax2.set_title("Individual Network States")
+                ax2.set_xticks(x)
+                ax2.set_xticklabels(networks, rotation=45)
+                ax2.legend()
+                ax2.grid(True, axis='y', alpha=0.3)
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+            
+            # Decision making
+            st.subheader("Collective Decision Making")
+            
+            options = st.text_area("Options (one per line)", "Option A\nOption B\nOption C").split('\n')
+            
+            if st.button("Make Decision"):
+                decision = collective.make_collective_decision(options)
+                st.success(f"Collective Decision: **{decision}**")
+                
+                # Show decision history
+                if collective.decision_history:
+                    latest = collective.decision_history[-1]
+                    st.write("Decision Details:")
+                    st.json(latest)
+
+
+def evolutionary_resonance_demo():
+    """Demo for Evolutionary Resonance"""
+    st.header("🧬 Evolutionary Resonance")
+    st.write("Evolve networks to optimize for specific fitness criteria!")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Evolution Parameters")
+        
+        # Population parameters
+        pop_size = st.slider("Population Size", 10, 100, 30)
+        
+        # Fitness metric
+        fitness = st.selectbox(
+            "Fitness Metric",
+            ["HARMONY", "EFFICIENCY", "INFORMATION", "ADAPTABILITY", "CREATIVITY", "MEMORY"]
+        )
+        
+        # Evolution parameters
+        mutation_rate = st.slider("Mutation Rate", 0.0, 0.5, 0.15)
+        crossover_rate = st.slider("Crossover Rate", 0.0, 1.0, 0.7)
+        
+        # Number of generations
+        num_generations = st.slider("Generations", 5, 50, 20)
+        
+        if st.button("Start Evolution"):
+            with st.spinner("Initializing evolution..."):
+                # Create evolutionary system
+                evo = EvolutionaryResonance(
+                    population_size=pop_size,
+                    fitness_metric=FitnessMetric[fitness],
+                    mutation_rate=mutation_rate,
+                    crossover_rate=crossover_rate,
+                    speciation_threshold=0.3
+                )
+                
+                # Initialize population
+                evo.initialize_population()
+                
+                st.session_state.evo_system = evo
+                st.session_state.generation = 0
+                
+    with col2:
+        if hasattr(st.session_state, 'evo_system'):
+            evo = st.session_state.evo_system
+            
+            st.subheader("Evolution Progress")
+            
+            if st.button("Evolve"):
+                progress_bar = st.progress(0)
+                
+                best_fitness_history = []
+                species_count_history = []
+                
+                for gen in range(num_generations):
+                    evo.evolve_generation()
+                    
+                    best = evo.get_best_genome()
+                    best_fitness_history.append(best.fitness)
+                    species_count_history.append(len(evo.species))
+                    
+                    progress_bar.progress((gen + 1) / num_generations)
+                
+                # Visualize evolution
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                
+                # Fitness evolution
+                ax1.plot(best_fitness_history, linewidth=2, color='green')
+                ax1.set_xlabel("Generation")
+                ax1.set_ylabel("Best Fitness")
+                ax1.set_title("Fitness Evolution")
+                ax1.grid(True, alpha=0.3)
+                
+                # Species diversity
+                ax2.plot(species_count_history, linewidth=2, color='blue')
+                ax2.set_xlabel("Generation")
+                ax2.set_ylabel("Number of Species")
+                ax2.set_title("Species Diversity")
+                ax2.grid(True, alpha=0.3)
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+                
+                # Show best network
+                st.subheader("Best Evolved Network")
+                
+                best_genome = evo.get_best_genome()
+                st.write(f"**Fitness:** {best_genome.fitness:.3f}")
+                st.write(f"**Nodes:** {len(best_genome.node_genes)}")
+                st.write(f"**Connections:** {len(best_genome.connection_genes)}")
+                
+                # Species information
+                st.subheader("Species Information")
+                species_info = evo.get_species_info()
+                
+                for species_id, info in species_info.items():
+                    with st.expander(f"{species_id} ({info['size']} members)"):
+                        st.write(f"Mean Fitness: {info['mean_fitness']:.3f}")
+                        st.write(f"Max Fitness: {info['max_fitness']:.3f}")
+                        st.write(f"Age: {info['age']} generations")
+                        st.write(f"Stagnation: {info['stagnation']} generations")
 
 
 if __name__ == "__main__":

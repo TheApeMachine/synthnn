@@ -28,6 +28,9 @@ from .microtonal_extensions import (
     AdaptiveMicrotonalSystem
 )
 from .emotional_resonance import EmotionalResonanceEngine, EmotionCategory
+from .resonance_field import ResonanceField4D, SpatialResonantNode, BoundaryCondition
+from .collective_intelligence import CollectiveIntelligence, CommunicationMode, ConsensusMethod, NetworkRole
+from .evolutionary_resonance import EvolutionaryResonance, FitnessMetric, Genome, Species
 
 __all__ = [
     'ResonantNode',
@@ -49,7 +52,18 @@ __all__ = [
     'MicrotonalResonantNetwork',
     'AdaptiveMicrotonalSystem',
     'EmotionalResonanceEngine',
-    'EmotionCategory'
+    'EmotionCategory',
+    'ResonanceField4D',
+    'SpatialResonantNode',
+    'BoundaryCondition',
+    'CollectiveIntelligence',
+    'CommunicationMode',
+    'ConsensusMethod',
+    'NetworkRole',
+    'EvolutionaryResonance',
+    'FitnessMetric',
+    'Genome',
+    'Species'
 ]
 
 __version__ = '0.1.0' 
