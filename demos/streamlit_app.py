@@ -30,6 +30,7 @@ from synthnn.core.microtonal_extensions import (
     AdaptiveMicrotonalSystem,
     MicrotonalScale  # Added MicrotonalScale for type hinting if needed
 )
+from synthnn.core.emotional_resonance import EmotionalResonanceEngine, EmotionCategory
 # Import for Multimodal Demo
 from synthnn.core import TextPatternEncoder, ImagePatternEncoder, AudioPatternEncoder # Assuming AudioPatternEncoder exists or will be created
 # We might need to define a simplified version or parts of MultiModalResonantSystem here or import it if it becomes a standalone utility
@@ -429,13 +430,14 @@ class SynthNNDemo:
         network = st.session_state.network
         
         # Create tabs
-        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal = st.tabs([
+        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional = st.tabs([
             "🎼 Music Generation", 
             "📊 Network Visualization", 
             "🔬 Analysis",
             "🎮 Interactive Control",
             "🌍 Microtonal Exploration",
-            "👁️‍🗨️ Multimodal Playground"  # New Tab
+            "👁️‍🗨️ Multimodal Playground",
+            "💖 Emotional Resonance"  # New Tab
         ])
 
         with tab_music_gen:
@@ -619,6 +621,16 @@ class SynthNNDemo:
 
         with tab_multimodal:
             self.render_multimodal_playground_demo()
+
+        with tab_emotional:
+            st.header("💖 Emotional Resonance Engine")
+            st.markdown("""
+            Experience how emotions map to resonant frequencies and harmonic patterns.
+            This engine can analyze emotional content, generate empathetic responses,
+            and create emotional journeys through sound.
+            """)
+            
+            self.render_emotional_resonance_demo()
 
         # Footer
         st.markdown("---")
@@ -1066,7 +1078,7 @@ class SynthNNDemo:
                 ax.legend()
                 ax.grid(True, alpha=0.3)
                 st.pyplot(fig)
-
+            
             st.session_state.microtonal_audio_buffer = None
             st.session_state.cp_pitch_history = None
 
@@ -1370,7 +1382,523 @@ class SynthNNDemo:
 
         return "\n".join(interpretation_parts)
 
-    # --- End of helper methods for multimodal demo ---
+    def render_emotional_resonance_demo(self):
+        """Render the Emotional Resonance Engine demo."""
+        # Initialize the engine
+        if 'emotional_engine' not in st.session_state:
+            st.session_state.emotional_engine = EmotionalResonanceEngine()
+            
+        engine = st.session_state.emotional_engine
+        
+        # Create sub-tabs for different demos
+        emotion_tabs = st.tabs([
+            "🎭 Emotion Explorer",
+            "🤝 Empathetic Response",
+            "🎨 Emotional Journey",
+            "🎵 Analyze Audio",
+            "🌍 Cultural Context"
+        ])
+        
+        with emotion_tabs[0]:  # Emotion Explorer
+            st.subheader("Explore Emotional Signatures")
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                # Emotion selector
+                selected_emotion = st.selectbox(
+                    "Select Emotion",
+                    options=[e for e in EmotionCategory],
+                    format_func=lambda x: x.value.title()
+                )
+                
+                # Intensity slider
+                intensity = st.slider(
+                    "Emotional Intensity",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.8,
+                    step=0.1
+                )
+                
+                # Duration
+                duration = st.slider(
+                    "Duration (seconds)",
+                    min_value=1.0,
+                    max_value=10.0,
+                    value=3.0,
+                    step=0.5
+                )
+                
+                # Generate button
+                if st.button("🎵 Generate Emotion", key="gen_emotion"):
+                    with st.spinner("Creating emotional resonance..."):
+                        # Create emotional network
+                        network = engine.create_emotional_network(
+                            selected_emotion,
+                            intensity
+                        )
+                        
+                        # Generate audio
+                        audio = engine.generate_empathetic_response(
+                            selected_emotion,
+                            "matching",
+                            duration
+                        )
+                        
+                        st.session_state.emotional_audio = audio
+                        st.session_state.current_emotion = selected_emotion
+                        
+            with col2:
+                # Display emotion signature
+                if selected_emotion:
+                    signature = engine.emotion_signatures[selected_emotion]
+                    
+                    # Create info display
+                    st.markdown("### Emotional Signature")
+                    
+                    # Color display
+                    color = signature.color_association
+                    st.markdown(
+                        f'<div style="background-color: rgb{color}; '
+                        f'width: 100%; height: 50px; border-radius: 10px; '
+                        f'margin-bottom: 20px;"></div>',
+                        unsafe_allow_html=True
+                    )
+                    
+                    # Metrics
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        st.metric("Base Frequency", f"{signature.base_frequency:.1f} Hz")
+                        st.metric("Energy Level", f"{signature.energy_level:.2f}")
+                    with col_b:
+                        st.metric("Tempo Range", f"{signature.tempo_range[0]}-{signature.tempo_range[1]} BPM")
+                        st.metric("Valence", f"{signature.valence:+.2f}")
+                    with col_c:
+                        st.metric("Phase Coherence", f"{signature.phase_coherence:.2f}")
+                        st.metric("Mode", signature.modal_preference.title())
+                    
+                    # Harmonic series visualization
+                    fig, ax = plt.subplots(figsize=(8, 4))
+                    harmonics = range(1, len(signature.harmonic_series) + 1)
+                    ax.bar(harmonics, signature.harmonic_series, 
+                          color=[color[i]/255 for i in range(3)] + [0.7])
+                    ax.set_xlabel("Harmonic Number")
+                    ax.set_ylabel("Relative Strength")
+                    ax.set_title(f"Harmonic Series for {signature.name}")
+                    ax.grid(True, alpha=0.3)
+                    st.pyplot(fig)
+            
+            # Audio player
+            if 'emotional_audio' in st.session_state and st.session_state.emotional_audio is not None:
+                st.markdown("### Generated Emotional Audio")
+                audio_html = self.create_audio_player(st.session_state.emotional_audio)
+                st.markdown(audio_html, unsafe_allow_html=True)
+                
+                # Waveform visualization
+                fig, ax = plt.subplots(figsize=(10, 3))
+                time_axis = np.arange(len(st.session_state.emotional_audio)) / 44100
+                ax.plot(time_axis, st.session_state.emotional_audio, linewidth=0.5)
+                ax.set_xlabel("Time (seconds)")
+                ax.set_ylabel("Amplitude")
+                ax.set_title(f"Waveform - {st.session_state.current_emotion.value.title()}")
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                
+        with emotion_tabs[1]:  # Empathetic Response
+            st.subheader("Generate Empathetic Responses")
+            st.markdown("""
+            Select an input emotion and response type to generate an empathetic 
+            musical response that either matches, complements, or balances the emotion.
+            """)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                input_emotion = st.selectbox(
+                    "Input Emotion",
+                    options=[e for e in EmotionCategory],
+                    format_func=lambda x: x.value.title(),
+                    key="input_emotion"
+                )
+                
+                response_type = st.radio(
+                    "Response Type",
+                    options=["matching", "complementary", "balancing"],
+                    help="""
+                    - **Matching**: Reflects the same emotion back
+                    - **Complementary**: Responds with a supportive emotion
+                    - **Balancing**: Provides emotional equilibrium
+                    """
+                )
+                
+            with col2:
+                st.markdown("### Response Mapping")
+                
+                # Show what the response will be
+                if response_type == "matching":
+                    response_emotion = input_emotion
+                    st.info(f"Response will match: **{input_emotion.value.title()}**")
+                elif response_type == "complementary":
+                    complementary_map = {
+                        EmotionCategory.JOY: EmotionCategory.LOVE,
+                        EmotionCategory.SADNESS: EmotionCategory.CALM,
+                        EmotionCategory.ANGER: EmotionCategory.CALM,
+                        EmotionCategory.FEAR: EmotionCategory.LOVE,
+                        EmotionCategory.EXCITEMENT: EmotionCategory.JOY,
+                    }
+                    response_emotion = complementary_map.get(input_emotion, EmotionCategory.CALM)
+                    st.info(f"Response will be: **{response_emotion.value.title()}**")
+                else:  # balancing
+                    st.info("Response will balance with opposite valence emotion")
+                
+            if st.button("🎵 Generate Response", key="gen_response"):
+                with st.spinner("Generating empathetic response..."):
+                    response_audio = engine.generate_empathetic_response(
+                        input_emotion,
+                        response_type,
+                        duration=4.0
+                    )
+                    
+                    st.session_state.response_audio = response_audio
+                    
+                    # Display both waveforms
+                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6))
+                    
+                    # Input emotion (generate for comparison)
+                    input_audio = engine.generate_empathetic_response(
+                        input_emotion, "matching", duration=4.0
+                    )
+                    
+                    time_axis = np.arange(len(input_audio)) / 44100
+                    
+                    # Input waveform
+                    ax1.plot(time_axis, input_audio, linewidth=0.5, alpha=0.7)
+                    ax1.set_title(f"Input: {input_emotion.value.title()}")
+                    ax1.set_ylabel("Amplitude")
+                    ax1.grid(True, alpha=0.3)
+                    
+                    # Response waveform
+                    ax2.plot(time_axis, response_audio, linewidth=0.5, alpha=0.7)
+                    ax2.set_title(f"Response: {response_type.title()}")
+                    ax2.set_xlabel("Time (seconds)")
+                    ax2.set_ylabel("Amplitude")
+                    ax2.grid(True, alpha=0.3)
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # Audio player for response
+                    st.markdown("### Empathetic Response Audio")
+                    audio_html = self.create_audio_player(response_audio)
+                    st.markdown(audio_html, unsafe_allow_html=True)
+                    
+        with emotion_tabs[2]:  # Emotional Journey
+            st.subheader("Create an Emotional Journey")
+            st.markdown("""
+            Design a journey through multiple emotions with smooth transitions.
+            """)
+            
+            # Journey builder
+            if 'emotion_journey' not in st.session_state:
+                st.session_state.emotion_journey = []
+                
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Add emotion to journey
+                new_emotion = st.selectbox(
+                    "Add Emotion",
+                    options=[e for e in EmotionCategory],
+                    format_func=lambda x: x.value.title(),
+                    key="journey_emotion"
+                )
+                
+                emotion_duration = st.slider(
+                    "Duration (seconds)",
+                    min_value=1.0,
+                    max_value=5.0,
+                    value=2.0,
+                    step=0.5,
+                    key="journey_duration"
+                )
+                
+                if st.button("➕ Add to Journey"):
+                    st.session_state.emotion_journey.append(
+                        (new_emotion, emotion_duration)
+                    )
+                    
+            with col2:
+                # Display current journey
+                st.markdown("### Current Journey")
+                if st.session_state.emotion_journey:
+                    total_duration = sum(d for _, d in st.session_state.emotion_journey)
+                    st.metric("Total Duration", f"{total_duration:.1f}s")
+                    
+                    for i, (emotion, duration) in enumerate(st.session_state.emotion_journey):
+                        st.text(f"{i+1}. {emotion.value.title()} ({duration}s)")
+                        
+                    if st.button("🗑️ Clear Journey"):
+                        st.session_state.emotion_journey = []
+                        st.experimental_rerun()
+                else:
+                    st.info("No emotions added yet")
+                    
+            # Generate journey
+            if st.session_state.emotion_journey and st.button("🎵 Generate Journey", key="gen_journey"):
+                with st.spinner("Creating emotional journey..."):
+                    journey_audio = engine.create_emotional_journey(
+                        st.session_state.emotion_journey,
+                        transition_time=1.0
+                    )
+                    
+                    st.session_state.journey_audio = journey_audio
+                    
+                    # Visualize journey
+                    fig, ax = plt.subplots(figsize=(12, 6))
+                    
+                    # Create color bands for each emotion
+                    current_time = 0
+                    for emotion, duration in st.session_state.emotion_journey:
+                        color = engine.get_emotion_color(emotion)
+                        color_norm = [c/255 for c in color]
+                        
+                        ax.axvspan(current_time, current_time + duration,
+                                 color=color_norm, alpha=0.3,
+                                 label=emotion.value.title())
+                        
+                        # Add emotion label
+                        ax.text(current_time + duration/2, 0.9,
+                               emotion.value.title(),
+                               ha='center', va='center',
+                               transform=ax.get_xaxis_transform())
+                        
+                        current_time += duration
+                    
+                    # Plot waveform
+                    time_axis = np.arange(len(journey_audio)) / 44100
+                    ax.plot(time_axis, journey_audio, linewidth=0.5, color='black', alpha=0.7)
+                    
+                    ax.set_xlabel("Time (seconds)")
+                    ax.set_ylabel("Amplitude")
+                    ax.set_title("Emotional Journey")
+                    ax.grid(True, alpha=0.3)
+                    ax.set_xlim(0, time_axis[-1])
+                    
+                    st.pyplot(fig)
+                    
+                    # Audio player
+                    st.markdown("### Journey Audio")
+                    audio_html = self.create_audio_player(journey_audio)
+                    st.markdown(audio_html, unsafe_allow_html=True)
+                    
+        with emotion_tabs[3]:  # Analyze Audio
+            st.subheader("Analyze Emotional Content")
+            st.markdown("""
+            Upload an audio file or use generated audio to analyze its emotional content.
+            """)
+            
+            # File upload
+            uploaded_file = st.file_uploader(
+                "Choose an audio file",
+                type=['wav', 'mp3', 'ogg'],
+                key="emotion_upload"
+            )
+            
+            audio_to_analyze = None
+            
+            if uploaded_file is not None:
+                # Read uploaded file
+                audio_data = uploaded_file.read()
+                # For simplicity, assume WAV format
+                # In production, you'd want to handle multiple formats
+                import io
+                from scipy.io import wavfile
+                
+                try:
+                    sr, audio_to_analyze = wavfile.read(io.BytesIO(audio_data))
+                    # Convert to mono if stereo
+                    if len(audio_to_analyze.shape) > 1:
+                        audio_to_analyze = audio_to_analyze.mean(axis=1)
+                    # Normalize
+                    audio_to_analyze = audio_to_analyze / np.max(np.abs(audio_to_analyze))
+                except:
+                    st.error("Error reading audio file. Please upload a valid WAV file.")
+                    
+            elif 'emotional_audio' in st.session_state:
+                if st.button("Use Generated Audio"):
+                    audio_to_analyze = st.session_state.emotional_audio
+                    
+            if audio_to_analyze is not None:
+                with st.spinner("Analyzing emotional content..."):
+                    # Analyze emotion
+                    emotion_scores = engine.analyze_emotional_content(audio_to_analyze)
+                    
+                    # Sort by score
+                    sorted_emotions = sorted(
+                        emotion_scores.items(),
+                        key=lambda x: x[1],
+                        reverse=True
+                    )
+                    
+                    # Display results
+                    st.markdown("### Detected Emotions")
+                    
+                    # Bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    
+                    emotions = [e[0].value.title() for e in sorted_emotions[:8]]
+                    scores = [e[1] for e in sorted_emotions[:8]]
+                    colors = [engine.get_emotion_color(e[0]) for e in sorted_emotions[:8]]
+                    colors_norm = [[c/255 for c in color] for color in colors]
+                    
+                    bars = ax.bar(emotions, scores, color=colors_norm)
+                    ax.set_ylabel("Probability")
+                    ax.set_title("Emotional Content Analysis")
+                    ax.set_ylim(0, max(scores) * 1.2)
+                    
+                    # Add value labels on bars
+                    for bar, score in zip(bars, scores):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height,
+                               f'{score:.2%}',
+                               ha='center', va='bottom')
+                    
+                    plt.xticks(rotation=45)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # Top emotions summary
+                    col1, col2, col3 = st.columns(3)
+                    
+                    for i, (emotion, score) in enumerate(sorted_emotions[:3]):
+                        with [col1, col2, col3][i]:
+                            color = engine.get_emotion_color(emotion)
+                            st.markdown(
+                                f'<div style="background-color: rgb{color}; '
+                                f'padding: 20px; border-radius: 10px; text-align: center;">'
+                                f'<h3 style="margin: 0;">{emotion.value.title()}</h3>'
+                                f'<h2 style="margin: 10px 0;">{score:.1%}</h2>'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+                            
+        with emotion_tabs[4]:  # Cultural Context
+            st.subheader("Cultural Emotion Expression")
+            st.markdown("""
+            Explore how different cultures express emotions with varying intensities.
+            """)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                cultural_context = st.selectbox(
+                    "Cultural Context",
+                    options=["None", "western", "eastern", "latin", "nordic"],
+                    key="cultural_context"
+                )
+                
+                selected_culture_emotion = st.selectbox(
+                    "Emotion",
+                    options=[e for e in EmotionCategory],
+                    format_func=lambda x: x.value.title(),
+                    key="culture_emotion"
+                )
+                
+                base_intensity = st.slider(
+                    "Base Intensity",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.7,
+                    step=0.1,
+                    key="culture_intensity"
+                )
+                
+            with col2:
+                # Show cultural modifier if applicable
+                if cultural_context != "None" and cultural_context in engine.cultural_modifiers:
+                    modifiers = engine.cultural_modifiers[cultural_context]
+                    
+                    st.markdown("### Cultural Modifiers")
+                    
+                    # Display all modifiers for this culture
+                    for emotion, modifier in modifiers.items():
+                        if emotion == selected_culture_emotion:
+                            st.success(f"**{emotion.value.title()}**: {modifier:.1f}x (selected)")
+                        else:
+                            st.info(f"{emotion.value.title()}: {modifier:.1f}x")
+                            
+                    # Calculate effective intensity
+                    if selected_culture_emotion in modifiers:
+                        effective_intensity = base_intensity * modifiers[selected_culture_emotion]
+                        st.metric(
+                            "Effective Intensity",
+                            f"{effective_intensity:.2f}",
+                            f"{(effective_intensity - base_intensity):+.2f}"
+                        )
+                        
+            # Generate comparison
+            if st.button("🎵 Generate Comparison", key="gen_culture"):
+                with st.spinner("Generating cultural comparison..."):
+                    # Generate without cultural context
+                    network_base = engine.create_emotional_network(
+                        selected_culture_emotion,
+                        base_intensity
+                    )
+                    audio_base = engine.generate_empathetic_response(
+                        selected_culture_emotion,
+                        "matching",
+                        duration=3.0
+                    )
+                    
+                    # Generate with cultural context
+                    if cultural_context != "None":
+                        network_cultural = engine.create_emotional_network(
+                            selected_culture_emotion,
+                            base_intensity,
+                            cultural_context
+                        )
+                        audio_cultural = engine.generate_empathetic_response(
+                            selected_culture_emotion,
+                            "matching",
+                            duration=3.0
+                        )
+                    else:
+                        audio_cultural = audio_base
+                        
+                    # Visualize comparison
+                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6))
+                    
+                    time_axis = np.arange(len(audio_base)) / 44100
+                    
+                    # Base audio
+                    ax1.plot(time_axis, audio_base, linewidth=0.5, alpha=0.7)
+                    ax1.set_title(f"Base Expression - {selected_culture_emotion.value.title()}")
+                    ax1.set_ylabel("Amplitude")
+                    ax1.grid(True, alpha=0.3)
+                    
+                    # Cultural audio
+                    ax2.plot(time_axis, audio_cultural, linewidth=0.5, alpha=0.7)
+                    ax2.set_title(f"Cultural Expression ({cultural_context})")
+                    ax2.set_xlabel("Time (seconds)")
+                    ax2.set_ylabel("Amplitude")
+                    ax2.grid(True, alpha=0.3)
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # Audio players
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("### Base Expression")
+                        audio_html = self.create_audio_player(audio_base)
+                        st.markdown(audio_html, unsafe_allow_html=True)
+                        
+                    with col2:
+                        st.markdown(f"### {cultural_context.title() if cultural_context != 'None' else 'Base'} Expression")
+                        audio_html = self.create_audio_player(audio_cultural)
+                        st.markdown(audio_html, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

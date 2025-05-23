@@ -183,16 +183,20 @@ class SynthNNAdapter(nn.Module):
         output_adapter_effects = []
 
         # Reset resonant network state at the beginning of each forward pass.
-        # This ensures that the adapter is stateless for each call to forward(),
-        # and each token within the batch effectively starts with a "fresh" resonant network.
+        # This ensures that the adapter starts from a consistent initial state for each
+        # invocation of forward() (e.g., when called by an LLM layer).
+        # The resonant network's internal state WILL EVOLVE AND CARRY OVER
+        # as it processes items sequentially within the loop below for this single forward pass.
         self.reset_resonant_network_state()
 
         # --- Batch (Item) Processing Note ---
-        # The loop now iterates B*S times if input is [B,S,H].
-        # Due to reset_resonant_network_state() called above, the network state
-        # does NOT carry over from one token to the next token within this loop.
-        # Each token gets processed by the resonant network starting from its initial state,
-        # modulated by that token's specific hidden state.
+        # The loop iterates B*S times if the input llm_hidden_state was [B,S,H].
+        # The resonant_network.step() is called for self.synthnn_steps for each item.
+        # Since reset_resonant_network_state() is called *before* this loop,
+        # the internal state of the resonant network (phases, amplitudes)
+        # *will carry over* from the processing of item `i` to item `i+1`.
+        # This allows the adapter to capture short-term temporal dynamics across
+        # the items processed within this forward pass.
 
         for i in range(num_total_items):
             single_item_state = processed_llm_state[i] # [hidden_size]

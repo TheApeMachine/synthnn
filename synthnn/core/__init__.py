@@ -27,6 +27,7 @@ from .microtonal_extensions import (
     MicrotonalResonantNetwork,
     AdaptiveMicrotonalSystem
 )
+from .emotional_resonance import EmotionalResonanceEngine, EmotionCategory
 
 __all__ = [
     'ResonantNode',
@@ -46,7 +47,9 @@ __all__ = [
     'MicrotonalScale',
     'MicrotonalScaleLibrary',
     'MicrotonalResonantNetwork',
-    'AdaptiveMicrotonalSystem'
+    'AdaptiveMicrotonalSystem',
+    'EmotionalResonanceEngine',
+    'EmotionCategory'
 ]
 
 __version__ = '0.1.0' 
