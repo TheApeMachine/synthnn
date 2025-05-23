@@ -1,5 +1,5 @@
 from synthnn.core import AcceleratedMusicalNetwork, ResonantNode # For type hinting / instantiation
-from detector import ModeDetector # Assuming detector.py contains ModeDetector
+from .detector import ModeDetector # Assuming detector.py contains ModeDetector
 import numpy as np
 import time
 

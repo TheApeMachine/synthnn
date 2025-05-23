@@ -11,8 +11,8 @@ from scipy.io import wavfile
 import time
 
 # Original imports (what you might have)
-from abstract import ResonantNetwork as OriginalNetwork
-from detector import ModeDetector
+from experimental.abstract import ResonantNetwork as OriginalNetwork
+from applications.detector import ModeDetector
 
 # New framework imports
 from synthnn.core import AcceleratedMusicalNetwork, MusicalResonantNetwork

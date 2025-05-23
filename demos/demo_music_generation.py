@@ -11,8 +11,8 @@ This script shows various ways to use the modal music generation framework:
 
 import numpy as np
 import matplotlib.pyplot as plt
-from modal_music_generator import ModalMusicGenerator
-from context_aware_detector import ContextAwareModeDetector
+from applications.modal_music_generator import ModalMusicGenerator
+from applications.context_aware_detector import ContextAwareModeDetector
 from scipy.io import wavfile
 
 def demo_basic_generation():

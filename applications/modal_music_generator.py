@@ -5,10 +5,10 @@ from collections import deque
 import json
 import time
 
-from adaptive import AdaptiveModalNetwork
-from hierarchical_modal import HierarchicalModalProcessor
-from context_aware_detector import ContextAwareModeDetector
-from synthnn.core import AcceleratedMusicalNetwork, ResonantNode
+from .adaptive import AdaptiveModalNetwork
+from .hierarchical_modal import HierarchicalModalProcessor
+from .context_aware_detector import ContextAwareModeDetector
+from synthnn.core import AcceleratedMusicalNetwork  # This core import is fine
 
 
 class ModalMusicGenerator:

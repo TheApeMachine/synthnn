@@ -4,8 +4,9 @@ from matplotlib.animation import FuncAnimation
 import threading
 import queue
 import time
-from modal_music_generator import ModalMusicGenerator, ModalPhraseGenerator, RhythmGenerator
-from context_aware_detector import ContextAwareModeDetector
+from .modal_music_generator import ModalMusicGenerator, ModalPhraseGenerator, RhythmGenerator
+from .context_aware_detector import ContextAwareModeDetector
+from synthnn.core import AcceleratedMusicalNetwork  # Need this for parametric phrase rendering
 
 class InteractiveModalGenerator:
     """
@@ -159,19 +160,56 @@ class InteractiveModalGenerator:
         return phrase_audio
     
     def _render_parametric_phrase(self, melody_contour, rhythm_pattern, params):
-        """Render phrase with parameter-controlled synthesis"""
+        """Render phrase with parameter-controlled synthesis using AcceleratedMusicalNetwork"""
         samples = int(sum(rhythm_pattern) * self.generator.beat_duration * self.sample_rate)
         audio = np.zeros(samples)
         
         mode_intervals = self.generator.context_detector.mode_intervals[params['mode']]
+        
+        # Create an AcceleratedMusicalNetwork for this parametric phrase
+        phrase_network = AcceleratedMusicalNetwork(
+            name=f"interactive_phrase_{params['mode']}_{int(time.time())}",
+            base_freq=self.base_freq,
+            mode=params['mode'],
+            mode_detector=self.generator.context_detector
+        )
+        
+        # Create nodes based on brightness parameter
+        # More brightness = more harmonics
+        num_harmonics = int(3 + params['brightness'] * 7)  # 3-10 harmonics
+        harmonic_intervals = []
+        for i in range(num_harmonics):
+            if i < len(mode_intervals):
+                harmonic_intervals.append(mode_intervals[i])
+            else:
+                # Add octaves of existing intervals
+                base_idx = i % len(mode_intervals)
+                octave = i // len(mode_intervals) + 1
+                harmonic_intervals.append(mode_intervals[base_idx] * (2 ** octave))
+        
+        initial_amplitude = 0.5 / np.sqrt(num_harmonics) if num_harmonics > 0 else 0.5
+        phrase_network.create_harmonic_nodes(harmonic_intervals, amplitude=initial_amplitude)
+        
+        # Configure network based on complexity
+        if params['complexity'] > 0.7:
+            phrase_network.create_modal_connections("all_to_all", weight_scale=0.2)
+            phrase_network.coupling_strength = 0.15
+        elif params['complexity'] > 0.3:
+            phrase_network.create_modal_connections("nearest_neighbor", weight_scale=0.1)
+            phrase_network.coupling_strength = 0.1
+        else:
+            phrase_network.create_modal_connections("nearest_neighbor", weight_scale=0.05)
+            phrase_network.coupling_strength = 0.05
+        
+        phrase_network.global_damping = 0.1 * (1 - params['complexity'])
         
         current_sample = 0
         for note_degree, duration_beats in zip(melody_contour, rhythm_pattern):
             note_duration = duration_beats * self.generator.beat_duration
             note_samples = int(note_duration * self.sample_rate)
             
-            if note_degree > 0:
-                # Calculate frequency
+            if note_degree > 0 and note_samples > 0:
+                # Calculate target frequency
                 if note_degree <= len(mode_intervals):
                     freq_ratio = mode_intervals[note_degree - 1]
                 else:
@@ -179,12 +217,21 @@ class InteractiveModalGenerator:
                     degree_in_octave = (note_degree - 1) % len(mode_intervals)
                     freq_ratio = mode_intervals[degree_in_octave] * (2 ** octave)
                 
-                note_freq = self.base_freq * freq_ratio
+                target_freq = self.base_freq * freq_ratio
                 
-                # Generate with brightness-controlled harmonics
-                t = np.linspace(0, note_duration, note_samples)
-                note_audio = self._synthesize_note(
-                    t, note_freq, params['brightness'], params['mode']
+                # Emphasize nodes near the target frequency
+                for node_id, node in phrase_network.nodes.items():
+                    if abs(node.frequency - target_freq) < (target_freq * 0.1):
+                        node.amplitude = 1.0
+                    elif abs(node.frequency - target_freq/2) < (target_freq * 0.05) or \
+                         abs(node.frequency - target_freq*2) < (target_freq * 0.05):
+                        node.amplitude = 0.7
+                    else:
+                        node.amplitude = initial_amplitude * 0.3
+                
+                # Generate using the network
+                note_audio = phrase_network.generate_audio_accelerated(
+                    note_duration, self.sample_rate
                 )
                 
                 # Apply envelope
@@ -193,40 +240,26 @@ class InteractiveModalGenerator:
                     note_duration,
                     params['complexity']
                 )
-                note_audio *= envelope
+                
+                if len(note_audio) == len(envelope):
+                    note_audio *= envelope
+                else:
+                    min_len = min(len(note_audio), len(envelope))
+                    note_audio = note_audio[:min_len] * envelope[:min_len]
                 
                 # Add to output
                 end_sample = min(current_sample + note_samples, samples)
                 audio[current_sample:end_sample] = note_audio[:end_sample-current_sample]
+                
+                # Slightly decay amplitudes for next note
+                for node in phrase_network.nodes.values():
+                    node.amplitude *= 0.9
             
             current_sample += note_samples
             if current_sample >= samples:
                 break
         
         return audio
-    
-    def _synthesize_note(self, t, freq, brightness, mode):
-        """Synthesize a note with brightness control"""
-        note = np.zeros_like(t)
-        
-        # Fundamental
-        note += 0.6 * np.sin(2 * np.pi * freq * t)
-        
-        # Brightness-controlled harmonics
-        num_harmonics = int(2 + brightness * 8)  # 2-10 harmonics
-        
-        for h in range(2, num_harmonics + 1):
-            # Adjust harmonic amplitude based on mode character
-            if mode in ['Lydian', 'Ionian']:
-                amp = 0.3 / h * brightness
-            elif mode in ['Phrygian', 'Locrian']:
-                amp = 0.2 / h * (1 - brightness * 0.5)
-            else:
-                amp = 0.25 / h
-            
-            note += amp * np.sin(2 * np.pi * freq * h * t)
-        
-        return note
     
     def _create_parametric_envelope(self, num_samples, duration, complexity):
         """Create envelope with complexity-based shape"""

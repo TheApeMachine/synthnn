@@ -18,7 +18,7 @@ def run_music_demo():
     """Run the music generation demonstration."""
     print("Launching Modal Music Generation Demonstration...")
     try:
-        from demo_music_generation import main as music_main
+        from demos.demo_music_generation import main as music_main
         music_main()
     except ImportError as e:
         print(f"Error: Could not import music demo - {e}")
@@ -34,6 +34,18 @@ def run_basic_examples():
         visualize_results()
     except ImportError as e:
         print(f"Error: Could not import basic examples - {e}")
+        sys.exit(1)
+
+
+def run_accelerated_demo():
+    """Run the accelerated music generation demonstration."""
+    print("Launching Accelerated Music Generation Demonstration...")
+    try:
+        from demos.demo_accelerated_music import demonstrate_accelerated_music_generation
+        demonstrate_accelerated_music_generation()
+    except ImportError as e:
+        print(f"Error: Could not import accelerated demo - {e}")
+        print("Make sure all dependencies are installed.")
         sys.exit(1)
 
 
@@ -69,6 +81,7 @@ def main():
 Examples:
   python main.py --music        # Run music generation demo
   python main.py --examples     # Run basic usage examples  
+  python main.py --accelerated  # Run accelerated music generation demo
   python main.py --shell        # Launch interactive shell
         """
     )
@@ -82,6 +95,11 @@ Examples:
         '--examples',
         action='store_true', 
         help='Run basic usage examples'
+    )
+    parser.add_argument(
+        '--accelerated',
+        action='store_true',
+        help='Run the accelerated music generation demonstration'
     )
     parser.add_argument(
         '--shell',
@@ -102,6 +120,8 @@ Examples:
         run_music_demo()
     elif args.examples:
         run_basic_examples()
+    elif args.accelerated:
+        run_accelerated_demo()
     elif args.shell:
         run_interactive_shell()
 

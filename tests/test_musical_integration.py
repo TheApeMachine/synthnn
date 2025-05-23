@@ -7,7 +7,7 @@ import numpy as np
 import time
 from synthnn.core import MusicalResonantNetwork, AcceleratedMusicalNetwork
 from synthnn.performance import BackendManager
-from detector import ModeDetector
+from applications.detector import ModeDetector
 
 
 def test_musical_network():
@@ -99,7 +99,7 @@ def test_integration():
     print("\nTesting integration...")
     
     # Import both old and new
-    from abstract import ResonantNetwork as OldNetwork
+    from experimental.abstract import ResonantNetwork as OldNetwork
     
     # Create similar networks
     mode_detector = ModeDetector()

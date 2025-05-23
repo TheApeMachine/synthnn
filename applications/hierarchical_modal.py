@@ -1,6 +1,6 @@
 import numpy as np
-from adaptive import AdaptiveModalNetwork
-from detector import ModeDetector
+from .adaptive import AdaptiveModalNetwork
+from .detector import ModeDetector
 
 class HierarchicalModalProcessor:
     """
