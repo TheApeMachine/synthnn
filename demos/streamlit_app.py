@@ -437,9 +437,9 @@ class SynthNNDemo:
         network = st.session_state.network
         
         # Create tabs
-        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional, tab_4d_field, tab_collective, tab_evolution, tab_audio_cleanup = st.tabs([
-            "🎼 Music Generation", 
-            "📊 Network Visualization", 
+        tab_music_gen, tab_viz, tab_analysis, tab_interactive, tab_microtonal, tab_multimodal, tab_emotional, tab_4d_field, tab_collective, tab_evolution, tab_audio_cleanup, tab_anomaly = st.tabs([
+            "🎼 Music Generation",
+            "📊 Network Visualization",
             "🔬 Analysis",
             "🎮 Interactive Control",
             "🌍 Microtonal Exploration",
@@ -448,7 +448,8 @@ class SynthNNDemo:
             "🌊 4D Resonance Fields",  # New Tab
             "🧠 Collective Intelligence",  # New Tab
             "🧬 Evolutionary Resonance",  # New Tab
-            "🧹 Audio Cleanup"  # New Tab
+            "🧹 Audio Cleanup",  # New Tab
+            "📈 Anomaly Detection"
         ])
 
         with tab_music_gen:
@@ -652,6 +653,12 @@ class SynthNNDemo:
 
         with tab_evolution:
             evolutionary_resonance_demo()
+
+        with tab_audio_cleanup:
+            self.render_audio_cleanup_demo()
+
+        with tab_anomaly:
+            self.render_anomaly_detection_demo()
 
         # Footer
         st.markdown("---")
@@ -2775,6 +2782,39 @@ def evolutionary_resonance_demo():
                 for name, config in st.session_state.cleanup_pipelines.items():
                     with st.expander(name):
                         st.json(config)
+
+    def render_anomaly_detection_demo(self):
+        """Demo showcasing time-series anomaly detection."""
+        st.header("📈 Time-Series Anomaly Detection")
+        st.write(
+            "Detect unusual spikes or changes in a numeric sequence using the SignalProcessor."
+        )
+
+        duration = st.slider("Signal Duration (seconds)", 5, 20, 10)
+        sample_rate = 100
+        t = np.linspace(0, duration, int(duration * sample_rate))
+        base_signal = np.sin(2 * np.pi * 0.5 * t)
+        noise = 0.1 * np.random.randn(len(t))
+        signal = base_signal + noise
+
+        anomaly_points = [int(0.2 * len(t)), int(0.6 * len(t)), int(0.85 * len(t))]
+        for idx in anomaly_points:
+            signal[idx] += 2.5 * np.random.choice([-1, 1])
+
+        processor = SignalProcessor(sample_rate=sample_rate)
+        anomalies = processor.detect_anomalies(signal, window_size=50, threshold_factor=3.0)
+
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.plot(t, signal, label="signal")
+        ax.scatter(t[anomalies], signal[anomalies], color="red", label="anomaly")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Value")
+        ax.set_title("Detected Anomalies")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+
+        st.write(f"Detected {int(np.sum(anomalies))} anomalies at positions: {np.where(anomalies)[0].tolist()}")
 
 
 if __name__ == "__main__":

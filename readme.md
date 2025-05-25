@@ -55,6 +55,7 @@ output = Σ(amplitude_i * sin(2π * frequency_i * time + phase_i))
 - **Adaptive music generation** with mode detection and real-time retuning
 - **Signal processing** without FFT artifacts
 - **Pattern recognition** through resonance matching
+- **Time-series anomaly detection** using adaptive thresholds
 - **Control systems** with emergent coordination
 - **Consciousness research** through global synchronization studies
 
@@ -225,6 +226,9 @@ python main.py --accelerated
 
 # Interactive Python shell with SynthNN loaded
 python main.py --shell
+
+# Time-series anomaly detection demo
+python examples/time_series_anomaly_demo.py
 ```
 
 ---

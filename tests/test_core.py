@@ -65,5 +65,14 @@ audio = np.sin(2 * np.pi * 440 * np.linspace(0, 0.1, 4410))
 audio_params = codec.encode(audio, 'audio')
 print(f"Audio encoded to {len(audio_params)} nodes")
 
+# Test anomaly detection
+print("\n--- Testing Anomaly Detection ---")
+processor = SignalProcessor(sample_rate=100)
+t = np.linspace(0, 10, 1000)
+sig = np.sin(2 * np.pi * 0.5 * t) + 0.1 * np.random.randn(len(t))
+sig[200] += 2.0
+anomalies = processor.detect_anomalies(sig, window_size=50, threshold_factor=3.0)
+print(f"Detected {np.sum(anomalies)} anomalies")
+
 print("\n✓ All tests passed successfully!")
 print("\nThe SynthNN core module is working correctly.") 

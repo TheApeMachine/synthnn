@@ -222,6 +222,17 @@ class SignalProcessor:
         events = envelope > threshold
         
         return events
+
+    def detect_anomalies(self, signal_data: np.ndarray,
+                          window_size: int = 1000,
+                          threshold_factor: float = 3.0) -> np.ndarray:
+        """Detect anomalies in a time series using adaptive thresholding."""
+        events = self.adaptive_threshold(
+            signal_data,
+            window_size=window_size,
+            threshold_factor=threshold_factor,
+        )
+        return events
     
     def resample(self, signal_data: np.ndarray,
                 target_rate: float) -> np.ndarray:

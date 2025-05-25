@@ -1,0 +1,34 @@
+"""Simple demo for time-series anomaly detection using SignalProcessor."""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from synthnn.core import SignalProcessor
+
+
+def generate_signal(duration=10.0, sample_rate=100):
+    t = np.linspace(0, duration, int(duration * sample_rate))
+    signal = np.sin(2 * np.pi * 0.5 * t) + 0.1 * np.random.randn(len(t))
+    anomaly_points = [int(0.2 * len(t)), int(0.6 * len(t)), int(0.85 * len(t))]
+    for idx in anomaly_points:
+        signal[idx] += 2.5 * np.random.choice([-1, 1])
+    return t, signal
+
+
+def main():
+    sp = SignalProcessor(sample_rate=100)
+    t, sig = generate_signal()
+    anomalies = sp.detect_anomalies(sig, window_size=50, threshold_factor=3.0)
+
+    plt.figure(figsize=(10, 3))
+    plt.plot(t, sig, label="signal")
+    plt.scatter(t[anomalies], sig[anomalies], color="red", label="anomaly")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Value")
+    plt.title("Detected Anomalies")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
