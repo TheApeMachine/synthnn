@@ -42,6 +42,7 @@ for _ in range(10):
     network.step(0.01)
 final_sync = network.measure_synchronization()
 print(f"Final synchronization: {final_sync:.4f}")
+print(f"Network total energy: {network.measure_total_energy():.4f}")
 
 # Test SignalProcessor
 print("\n--- Testing SignalProcessor ---")

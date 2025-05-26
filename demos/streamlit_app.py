@@ -548,11 +548,14 @@ class SynthNNDemo:
                 spectrum, fundamental, coherence = self.analyze_audio(audio)
                 
                 # Display metrics
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Fundamental Frequency", f"{fundamental:.2f} Hz" if fundamental else "N/A")
                 with col2:
                     st.metric("Average Phase Coherence", f"{np.mean(coherence):.3f}" if coherence else "N/A")
+                with col3:
+                    energy = network.measure_total_energy()
+                    st.metric("Network Energy", f"{energy:.3f}")
                 
                 # Spectrum plot
                 fig_spec, ax_spec = plt.subplots(figsize=(10, 4))

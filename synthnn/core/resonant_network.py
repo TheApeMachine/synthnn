@@ -171,6 +171,9 @@ class ResonantNetwork:
             self.history[f'phase_{node_id}'].append(node.phase)
             self.history[f'amplitude_{node_id}'].append(node.amplitude)
             self.history[f'signal_{node_id}'].append(node.oscillate(self.time))
+
+        # Record global metrics
+        self.history['total_energy'].append(self.measure_total_energy())
     
     def get_signals(self, node_ids: Optional[List[str]] = None) -> Dict[str, float]:
         """Get current signals from specified nodes (or all nodes)."""
@@ -283,5 +286,23 @@ class ResonantNetwork:
         for conn_str, conn_data in state['connections'].items():
             src, tgt = conn_str.split('->')
             network.connect(src, tgt, conn_data['weight'], conn_data['delay'])
-        
-        return network 
+
+        return network
+
+    def measure_total_energy(self, node_group: Optional[List[str]] = None) -> float:
+        """Calculate the total energy of the network or a subset of nodes."""
+        if node_group is None:
+            node_group = list(self.nodes.keys())
+
+        return sum(
+            self.nodes[nid].energy() for nid in node_group if nid in self.nodes
+        )
+
+    def get_network_statistics(self) -> Dict[str, float]:
+        """Return basic statistics about the current network state."""
+        return {
+            'num_nodes': len(self.nodes),
+            'num_connections': len(self.connections),
+            'synchronization': self.measure_synchronization(),
+            'total_energy': self.measure_total_energy(),
+        }
