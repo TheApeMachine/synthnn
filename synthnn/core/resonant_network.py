@@ -289,7 +289,7 @@ class ResonantNetwork:
 
         return network
 
-    def measure_total_energy(self, node_group: Optional[List[str]] = None) -> float:
+    def measure_total_energy(self, node_group: Optional[list[str]] = None) -> float:
         """Calculate the total energy of the network or a subset of nodes."""
         if node_group is None:
             node_group = list(self.nodes.keys())
