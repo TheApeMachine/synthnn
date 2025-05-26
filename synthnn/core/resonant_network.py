@@ -298,7 +298,7 @@ class ResonantNetwork:
             self.nodes[nid].energy() for nid in node_group if nid in self.nodes
         )
 
-    def get_network_statistics(self) -> Dict[str, float]:
+    def get_network_statistics(self) -> dict[str, float]:
         """Return basic statistics about the current network state."""
         return {
             'num_nodes': len(self.nodes),
