@@ -68,14 +68,15 @@ print(f"Audio encoded to {len(audio_params)} nodes")
 # Test anomaly detection
 print("\n--- Testing Anomaly Detection ---")
 processor = SignalProcessor(sample_rate=100)
+np.random.seed(42)  # For reproducible test results
 t = np.linspace(0, 10, 1000)
 sig = np.sin(2 * np.pi * 0.5 * t) + 0.1 * np.random.randn(len(t))
+# Inject a large anomaly at index 200 for testing detection
 sig[200] += 2.0
 anomalies = processor.detect_anomalies(sig, window_size=50, threshold_factor=3.0)
 print(f"Detected {np.sum(anomalies)} anomalies at indices: {np.where(anomalies)[0]}")
 assert np.sum(anomalies) > 0, "No anomalies detected when one was expected."
 # Optionally, be more specific:
 assert anomalies[200], "Anomaly expected at index 200 was not detected."
-
 print("\n✓ All tests passed successfully!")
 print("\nThe SynthNN core module is working correctly.") 
