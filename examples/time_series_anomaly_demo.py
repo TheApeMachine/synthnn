@@ -18,10 +18,23 @@ def generate_signal(duration: float = 10.0, sample_rate: int = 100) -> tuple[np.
     return t, signal
 
 
-def main():
+def main() -> None:
+    """Run the anomaly detection demo."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print(
+            "Error: matplotlib is required for visualization. "
+            "Install with: pip install matplotlib"
+        )
+        return
+
     sp = SignalProcessor(sample_rate=100)
     t, sig = generate_signal()
     anomalies = sp.detect_anomalies(sig, window_size=50, threshold_factor=3.0)
+
+    print(f"Generated signal with {len(sig)} samples")
+    print(f"Detected {np.sum(anomalies)} anomaly points")
 
     plt.figure(figsize=(10, 3))
     plt.plot(t, sig, label="signal")
