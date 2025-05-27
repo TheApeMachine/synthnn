@@ -32,7 +32,7 @@ from .resonance_field import ResonanceField4D, SpatialResonantNode, BoundaryCond
 from .collective_intelligence import CollectiveIntelligence, CommunicationMode, ConsensusMethod, NetworkRole
 from .evolutionary_resonance import EvolutionaryResonance, FitnessMetric, Genome, Species
 from .musical_synthesis import (
-    MusicalNode, MusicalResonantNetwork, MusicalSynthesizer,
+    MusicalNode, MusicalSynthesizer,
     WaveShape, FilterType, ADSREnvelope, Oscillator, Filter
 )
 from .rhythm_engine import (

@@ -319,7 +319,11 @@ class AudioCleanupEngine:
         artifacts = self.analyze_artifacts(audio, mode)
         
         # Encode to resonant representation
-        pattern = self.encoder.encode(audio, self.sample_rate)
+        pattern_dict = self.encoder.encode(audio)
+        pattern = [
+            (p['frequency'], p['amplitude'], p['phase'])
+            for p in pattern_dict.values()
+        ]
         
         # Filter in resonant domain
         filtered_pattern = self._filter_resonant_pattern(pattern, artifacts, mode)
@@ -345,7 +349,7 @@ class AudioCleanupEngine:
                 
         # Generate cleaned audio
         duration = len(audio) / self.sample_rate
-        cleaned = network.generate_signals(int(duration * self.sample_rate))
+        cleaned = network.compute_harmonic_state(duration, self.sample_rate)
         
         # Preserve transients if requested
         if preserve_transients:

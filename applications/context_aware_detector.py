@@ -1,5 +1,5 @@
 import numpy as np
-from detector import ModeDetector
+from .detector import ModeDetector
 from collections import deque
 import json
 

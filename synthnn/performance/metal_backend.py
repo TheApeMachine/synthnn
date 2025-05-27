@@ -22,6 +22,11 @@ class MetalBackend(ComputeBackend):
         self.queue = None
         self.mlx_available = False
         self.mps_available = False
+
+    @property
+    def backend_type(self):
+        from .backend import BackendType
+        return BackendType.METAL
         
     def initialize(self) -> None:
         """Initialize Metal backend."""
