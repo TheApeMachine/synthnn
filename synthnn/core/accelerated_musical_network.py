@@ -6,9 +6,11 @@ with the performance benefits of the acceleration backends.
 """
 
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
+import warnings
+from typing import Dict, Optional, Any
 
 from .musical_extensions import MusicalResonantNetwork
+from .musical_constants import MODE_INTERVALS
 from ..performance import BackendManager, BackendType
 
 
@@ -49,6 +51,10 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         self._device_connections = None
         
         print(f"AcceleratedMusicalNetwork initialized with {type(self.backend).__name__}")
+
+    def _get_mode_intervals(self, mode: str) -> list[float]:
+        """Return mode intervals if mode detector is missing."""
+        return MODE_INTERVALS.get(mode.lower(), MODE_INTERVALS['ionian'])
         
     def _sync_to_device(self):
         """Synchronize node data to device memory."""
@@ -232,18 +238,32 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             
         return audio
         
-    def morph_between_modes_accelerated(self, target_mode: str, 
+    def morph_between_modes_accelerated(self, target_mode: str,
                                        morph_time: float = 1.0,
                                        sample_rate: float = 44100) -> np.ndarray:
         """
         Accelerated mode morphing using device computation.
         """
-        if self.mode_detector is None:
-            raise ValueError("Mode detector required for mode morphing")
-            
-        # Get intervals
-        current_intervals = self.mode_detector.mode_intervals[self.mode]
-        target_intervals = self.mode_detector.mode_intervals[target_mode]
+        # Support legacy argument order where current_mode was passed first
+        if isinstance(morph_time, str) and isinstance(sample_rate, (int, float)):
+            target_mode = morph_time
+            morph_time = sample_rate
+            sample_rate = 44100
+        elif isinstance(morph_time, str):
+            raise ValueError(
+                "Invalid arguments: if target_mode is string, morph_time must be numeric"
+            )
+
+        if self.mode_detector is not None:
+            current_intervals = self.mode_detector.mode_intervals[self.mode]
+            target_intervals = self.mode_detector.mode_intervals[target_mode]
+        else:
+            warnings.warn(
+                "Mode detector missing; using default mode intervals",
+                RuntimeWarning,
+            )
+            current_intervals = self._get_mode_intervals(self.mode)
+            target_intervals = self._get_mode_intervals(target_mode)
         
         # Prepare intervals
         max_len = max(len(current_intervals), len(target_intervals))
@@ -318,8 +338,8 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             'fundamental': freqs[np.argmax(magnitudes[:len(magnitudes)//2])]
         }
         
-    def batch_process_signals(self, signals: List[np.ndarray], 
-                            operation: str = "analyze") -> List[Any]:
+    def batch_process_signals(self, signals: list[np.ndarray],
+                            operation: str = "analyze") -> list[Any]:
         """
         Process multiple signals in parallel using device acceleration.
         
@@ -330,6 +350,14 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         Returns:
             List of results
         """
+        # Support legacy call where sample_rate was passed instead of operation
+        if isinstance(operation, (int, float)):
+            warnings.warn(
+                "Legacy argument order detected in batch_process_signals",
+                DeprecationWarning,
+            )
+            operation = "analyze"
+
         # Stack signals for batch processing
         max_len = max(len(sig) for sig in signals)
         padded_signals = np.zeros((len(signals), max_len), dtype=np.float32)

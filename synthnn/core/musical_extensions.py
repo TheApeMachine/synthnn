@@ -7,12 +7,13 @@ with GPU acceleration support.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from collections import defaultdict
 
 from .resonant_network import ResonantNetwork
 from .resonant_node import ResonantNode
 from .signal_processor import SignalProcessor
+from .musical_constants import ROMAN_CHORD_MAP
 
 
 class MusicalResonantNetwork(ResonantNetwork):
@@ -156,16 +157,18 @@ class MusicalResonantNetwork(ResonantNetwork):
         
         return detected_mode
     
-    def _retune_to_mode(self, new_base_freq: float, mode_intervals: List[float]) -> None:
+    def _retune_to_mode(self, new_base_freq: float, mode_intervals: Union[str, list[float]]) -> None:
         """
         Retune all nodes to new base frequency with mode intervals.
         """
         self.base_freq = new_base_freq
-        
+
+        if isinstance(mode_intervals, str):
+            mode_intervals = ROMAN_CHORD_MAP.get(mode_intervals.upper(), [1])
+
         # Ensure we have the right number of intervals
         num_nodes = len(self.nodes)
         if len(mode_intervals) < num_nodes:
-            # Repeat last interval or generate octaves
             mode_intervals = mode_intervals + [mode_intervals[-1]] * (num_nodes - len(mode_intervals))
         
         # Retune each node
@@ -231,7 +234,7 @@ class MusicalResonantNetwork(ResonantNetwork):
                         weight = weight_scale / (1 + abs(i - j))
                         self.connect(src_id, tgt_id, weight=weight)
                         
-    def generate_chord_progression(self, chords: List[List[float]], 
+    def generate_chord_progression(self, chords: list[Union[str, list[float]]],
                                  duration_per_chord: float = 1.0,
                                  sample_rate: float = 44100) -> np.ndarray:
         """
@@ -247,7 +250,12 @@ class MusicalResonantNetwork(ResonantNetwork):
         """
         output = []
         
-        for chord_ratios in chords:
+        for chord in chords:
+            if isinstance(chord, str):
+                chord_ratios = ROMAN_CHORD_MAP.get(chord.upper(), [1])
+            else:
+                chord_ratios = chord
+
             # Retune network to chord
             self._retune_to_mode(self.base_freq, chord_ratios)
             

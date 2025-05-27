@@ -6,7 +6,7 @@ ADSR envelopes, filters, and effects for creating complex, musical sounds.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union, Callable
+from typing import Dict, List, Tuple, Optional, Union, Callable, Any
 from dataclasses import dataclass
 from enum import Enum
 import scipy.signal as signal
@@ -14,6 +14,7 @@ from scipy import interpolate
 
 from .resonant_node import ResonantNode
 from .resonant_network import ResonantNetwork
+from .musical_constants import MODE_INTERVALS
 
 
 class WaveShape(Enum):
@@ -426,13 +427,15 @@ class MusicalResonantNetwork(ResonantNetwork):
     Musical extension of ResonantNetwork with synthesis capabilities.
     """
     
-    def __init__(self, name: str = "musical_network", 
+    def __init__(self, name: str = "musical_network",
                  mode: str = "ionian",
-                 base_freq: float = 440.0):
+                 base_freq: float = 440.0,
+                 mode_detector: Optional[Any] = None):
         super().__init__(name)
-        
+
         self.mode = mode
         self.base_freq = base_freq
+        self.mode_detector = mode_detector
         
         # Musical timing
         self.tempo = 120.0  # BPM
@@ -447,18 +450,8 @@ class MusicalResonantNetwork(ResonantNetwork):
         self.mode_intervals = self._get_mode_intervals(mode)
         
     def _get_mode_intervals(self, mode: str) -> List[float]:
-        """Get frequency ratios for musical modes."""
-        mode_intervals = {
-            'ionian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2],     # Major
-            'dorian': [1, 9/8, 6/5, 4/3, 3/2, 5/3, 9/5, 2],
-            'phrygian': [1, 16/15, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
-            'lydian': [1, 9/8, 5/4, 45/32, 3/2, 5/3, 15/8, 2],
-            'mixolydian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 16/9, 2],
-            'aeolian': [1, 9/8, 6/5, 4/3, 3/2, 8/5, 9/5, 2],     # Natural minor
-            'locrian': [1, 16/15, 6/5, 4/3, 64/45, 8/5, 9/5, 2]
-        }
-        
-        return mode_intervals.get(mode.lower(), mode_intervals['ionian'])
+        """Return frequency ratios for a musical mode."""
+        return MODE_INTERVALS.get(mode.lower(), MODE_INTERVALS['ionian'])
         
     def add_musical_node(self, degree: int, octave: int = 0) -> MusicalNode:
         """Add a musical node at a specific scale degree."""

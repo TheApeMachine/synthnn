@@ -17,6 +17,11 @@ class CUDABackend(ComputeBackend):
         super().__init__(device_id)
         self.cupy_available = False
         self.torch_cuda_available = False
+
+    @property
+    def backend_type(self) -> "BackendType":
+        from .backend import BackendType
+        return BackendType.CUDA
         
     def initialize(self) -> None:
         """Initialize CUDA backend."""

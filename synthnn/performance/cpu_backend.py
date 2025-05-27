@@ -21,6 +21,11 @@ class CPUBackend(ComputeBackend):
     def __init__(self, device_id: int = 0):
         super().__init__(device_id)
         self.num_threads = multiprocessing.cpu_count()
+
+    @property
+    def backend_type(self) -> "BackendType":
+        from .backend import BackendType
+        return BackendType.CPU
         
     def initialize(self) -> None:
         """Initialize the CPU backend."""
