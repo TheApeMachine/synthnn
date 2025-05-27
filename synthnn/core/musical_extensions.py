@@ -165,7 +165,6 @@ class MusicalResonantNetwork(ResonantNetwork):
 
         if isinstance(mode_intervals, str):
             mode_intervals = ROMAN_CHORD_MAP.get(mode_intervals.upper(), [1])
-
         # Ensure we have the right number of intervals
         num_nodes = len(self.nodes)
         if len(mode_intervals) < num_nodes:

@@ -252,7 +252,6 @@ class SignalProcessor:
         sq_mean = np.convolve(signal_data ** 2, kernel, mode="same")
         eps = np.finfo(signal_data.dtype).eps * np.abs(signal_data).max() * 10
         std = np.sqrt(np.maximum(sq_mean - mean ** 2, eps))
-
         z_scores = np.abs(signal_data - mean) / std
         return z_scores > threshold_factor
     

@@ -262,6 +262,7 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
                 "Mode detector missing; using default mode intervals",
                 RuntimeWarning,
             )
+
             current_intervals = self._get_mode_intervals(self.mode)
             target_intervals = self._get_mode_intervals(target_mode)
         
@@ -338,6 +339,7 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             'fundamental': freqs[np.argmax(magnitudes[:len(magnitudes)//2])]
         }
         
+
     def batch_process_signals(self, signals: list[np.ndarray],
                             operation: str = "analyze") -> list[Any]:
         """
@@ -356,6 +358,7 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
                 "Legacy argument order detected in batch_process_signals",
                 DeprecationWarning,
             )
+
             operation = "analyze"
 
         # Stack signals for batch processing
