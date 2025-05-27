@@ -327,6 +327,38 @@ class MicrotonalResonantNetwork(MusicalResonantNetwork):
                         weight = harmonicity / closest_harmonic
                         self.connect(id1, id2, weight)
                         self.connect(id2, id1, weight)
+
+    def generate_signals(self, duration: float, sample_rate: float = 44100) -> np.ndarray:
+        """
+        Generate an audio signal from the current network state for a given duration.
+
+        Args:
+            duration: Duration of the signal in seconds.
+            sample_rate: The sample rate for the generated signal.
+
+        Returns:
+            A numpy array representing the audio signal.
+        """
+        num_samples = int(duration * sample_rate)
+        output_signal = np.zeros(num_samples)
+        dt = 1.0 / sample_rate
+
+        for i in range(num_samples):
+            # Use the step method from the parent class (ResonantNetwork)
+            # to advance the network state. This is suitable for generating
+            # segments of audio for distinct notes without continuous glissando.
+            super().step(dt) 
+            
+            current_sum = 0.0
+            # get_signals() is inherited from ResonantNetwork
+            active_signals = self.get_signals() 
+            for signal_val in active_signals.values():
+                current_sum += signal_val
+            output_signal[i] = current_sum
+        
+        # Scale the output to prevent clipping, similar to generate_microtonal_texture.
+        # A common scaling factor.
+        return output_signal * 0.5
                         
     def generate_microtonal_texture(self, duration: float, 
                                    density: float = 0.5,

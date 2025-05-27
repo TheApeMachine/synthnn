@@ -17,8 +17,9 @@ from .resonant_network import ResonantNetwork
 from .signal_processor import SignalProcessor
 from .pattern_codec import AudioPatternEncoder, AudioPatternDecoder
 from .musical_extensions import MusicalResonantNetwork
-from applications.detector import ModeDetector
+from applications.detector import ModeDetector 
 from .accelerated_musical_network import AcceleratedMusicalNetwork
+from ..performance import BackendManager # Added import
 
 
 class ArtifactType(Enum):
@@ -330,13 +331,36 @@ class AudioCleanupEngine:
         
         # Decode back to audio
         # Create musical network for decoding
-        network = MusicalResonantNetwork(
-            name="cleanup_network",
-            mode=mode or "ionian"
-        )
+        # Conditionally use AcceleratedMusicalNetwork if backend is available
+        # Note: 'from ..performance import BackendManager' is now at the module level.
+        
+        backend_manager = BackendManager()
+        use_accelerated = False # Default to false
+        try:
+            # Check if the preferred backend is available and usable
+            if backend_manager.get_backend().is_available():
+                use_accelerated = True
+        except Exception:
+            # Intentionally doing nothing if backend check fails,
+            # use_accelerated will remain False.
+            pass
+
+        if use_accelerated:
+            network = AcceleratedMusicalNetwork(
+                name="cleanup_network_accelerated",
+                mode=mode or "ionian"
+                # base_freq will use default from AcceleratedMusicalNetwork constructor
+            )
+            # print("Using AcceleratedMusicalNetwork for resynthesis cleanup.") # Optional: for debugging
+        else:
+            network = MusicalResonantNetwork(
+                name="cleanup_network",
+                mode=mode or "ionian"
+            )
+            # print("Using MusicalResonantNetwork for resynthesis cleanup.") # Optional: for debugging
         
         # Configure network from filtered pattern
-        for i, (freq, amp, phase) in enumerate(filtered_pattern):
+        for i, (freq, amp, phase) in enumerate(filtered_pattern): # Loop correctly placed
             if amp > 0.01:  # Threshold for including component
                 node = ResonantNode(
                     node_id=f"component_{i}",
@@ -483,14 +507,14 @@ class AudioCleanupEngine:
         for i in range(0, len(audio) - chunk_size, chunk_size):
             chunk = network_input[i:i + chunk_size]
             
-            # Drive network with chunk
-            for sample in chunk:
-                network.step(0.001, external_force=sample)
-                
-            # Extract network state
-            state = np.mean([node.amplitude * np.sin(node.phase) 
-                           for node in network.nodes.values()])
-            output[i:i + chunk_size] = state
+            # Process the entire chunk using the new method in AcceleratedMusicalNetwork
+            # The process_audio_chunk method handles per-sample iteration on the device
+            # and returns the calculated state for the chunk.
+            # dt=0.001 was the value used in the original per-sample step call.
+            dt_per_sample = 0.001 
+            current_output_state = network.process_audio_chunk(chunk, dt_per_sample)
+            
+            output[i:i + chunk_size] = current_output_state
             
         return output * np.max(np.abs(audio))  # Restore scale
 
