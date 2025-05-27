@@ -34,6 +34,23 @@ class ModeDetector:
         
         # Cache for performance
         self.signal_cache = {}
+
+    # ------------------------------------------------------------------
+    # Convenience helpers used by other modules
+    # ------------------------------------------------------------------
+
+    def detect_mode(self, signal, sample_rate=1.0):
+        """Return the most likely mode and its confidence score."""
+        probabilities = self.get_mode_probabilities(signal, sample_rate)
+        best_mode = max(probabilities.items(), key=lambda x: x[1])
+        return best_mode[0], float(best_mode[1])
+
+    def _get_mode_frequencies(self, mode: str, base_frequency: float) -> list[float]:
+        """Return the frequencies for a given mode based on a base frequency."""
+        intervals = self.mode_intervals.get(mode)
+        if not intervals:
+            return []
+        return [base_frequency * interval for interval in intervals]
         
     def analyze(self, signal, sample_rate=1.0):
         """

@@ -121,6 +121,13 @@ class BackendManager:
     def list_available_backends(self) -> List[BackendType]:
         """Get list of available backends."""
         return [backend for backend, available in self.available_backends.items() if available]
+
+    @property
+    def backend_type(self) -> BackendType:
+        """Currently selected backend type."""
+        if self.current_backend is not None:
+            return self.current_backend.backend_type
+        return self._select_best_backend()
     
     def get_device_info(self, backend_type: Optional[BackendType] = None) -> Dict[str, Any]:
         """Get device information for a specific backend."""

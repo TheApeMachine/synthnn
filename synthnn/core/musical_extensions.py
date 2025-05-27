@@ -156,16 +156,23 @@ class MusicalResonantNetwork(ResonantNetwork):
         
         return detected_mode
     
-    def _retune_to_mode(self, new_base_freq: float, mode_intervals: List[float]) -> None:
+    def _retune_to_mode(self, new_base_freq: float, mode_intervals) -> None:
         """
         Retune all nodes to new base frequency with mode intervals.
         """
         self.base_freq = new_base_freq
         
+        if isinstance(mode_intervals, str):
+            roman_map = {
+                'I': [1, 5/4, 3/2],
+                'IV': [4/3, 1, 5/4],
+                'V': [3/2, 5/4, 9/8],
+            }
+            mode_intervals = roman_map.get(mode_intervals.upper(), [1])
+
         # Ensure we have the right number of intervals
         num_nodes = len(self.nodes)
         if len(mode_intervals) < num_nodes:
-            # Repeat last interval or generate octaves
             mode_intervals = mode_intervals + [mode_intervals[-1]] * (num_nodes - len(mode_intervals))
         
         # Retune each node
@@ -231,7 +238,7 @@ class MusicalResonantNetwork(ResonantNetwork):
                         weight = weight_scale / (1 + abs(i - j))
                         self.connect(src_id, tgt_id, weight=weight)
                         
-    def generate_chord_progression(self, chords: List[List[float]], 
+    def generate_chord_progression(self, chords: List[object],
                                  duration_per_chord: float = 1.0,
                                  sample_rate: float = 44100) -> np.ndarray:
         """
@@ -247,7 +254,18 @@ class MusicalResonantNetwork(ResonantNetwork):
         """
         output = []
         
-        for chord_ratios in chords:
+        roman_map = {
+            'I': [1, 5/4, 3/2],
+            'IV': [4/3, 1, 5/4],
+            'V': [3/2, 5/4, 9/8],
+        }
+
+        for chord in chords:
+            if isinstance(chord, str):
+                chord_ratios = roman_map.get(chord.upper(), [1])
+            else:
+                chord_ratios = chord
+
             # Retune network to chord
             self._retune_to_mode(self.base_freq, chord_ratios)
             

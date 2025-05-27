@@ -226,22 +226,18 @@ class SignalProcessor:
     def detect_anomalies(self, signal_data: np.ndarray,
                           window_size: int = 1000,
                           threshold_factor: float = 3.0) -> np.ndarray:
-        """Detect anomalies in a time series using adaptive thresholding.
+        """Detect anomalies in a time series using a rolling z-score method."""
 
-        Args:
-            signal_data (np.ndarray): Input signal array.
-            window_size (int): Size of the moving window for adaptive thresholding.
-            threshold_factor (float): Multiplier for the threshold above the moving mean.
+        if window_size <= 1:
+            return np.zeros_like(signal_data, dtype=bool)
 
-        Returns:
-            np.ndarray: Binary array indicating detected anomalies (True where an anomaly is present).
-        """
-        events = self.adaptive_threshold(
-            signal_data,
-            window_size=window_size,
-            threshold_factor=threshold_factor,
-        )
-        return events
+        kernel = np.ones(window_size) / window_size
+        mean = np.convolve(signal_data, kernel, mode="same")
+        sq_mean = np.convolve(signal_data ** 2, kernel, mode="same")
+        std = np.sqrt(np.maximum(sq_mean - mean ** 2, 1e-8))
+
+        z_scores = np.abs(signal_data - mean) / std
+        return z_scores > threshold_factor
     
     def resample(self, signal_data: np.ndarray,
                 target_rate: float) -> np.ndarray:

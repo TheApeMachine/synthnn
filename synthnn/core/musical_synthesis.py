@@ -6,7 +6,7 @@ ADSR envelopes, filters, and effects for creating complex, musical sounds.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union, Callable
+from typing import Dict, List, Tuple, Optional, Union, Callable, Any
 from dataclasses import dataclass
 from enum import Enum
 import scipy.signal as signal
@@ -426,13 +426,15 @@ class MusicalResonantNetwork(ResonantNetwork):
     Musical extension of ResonantNetwork with synthesis capabilities.
     """
     
-    def __init__(self, name: str = "musical_network", 
+    def __init__(self, name: str = "musical_network",
                  mode: str = "ionian",
-                 base_freq: float = 440.0):
+                 base_freq: float = 440.0,
+                 mode_detector: Optional[Any] = None):
         super().__init__(name)
-        
+
         self.mode = mode
         self.base_freq = base_freq
+        self.mode_detector = mode_detector
         
         # Musical timing
         self.tempo = 120.0  # BPM

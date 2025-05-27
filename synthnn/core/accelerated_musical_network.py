@@ -49,6 +49,18 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         self._device_connections = None
         
         print(f"AcceleratedMusicalNetwork initialized with {type(self.backend).__name__}")
+
+    def _get_mode_intervals(self, mode: str) -> List[float]:
+        mapping = {
+            'ionian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2],
+            'dorian': [1, 9/8, 6/5, 4/3, 3/2, 5/3, 9/5, 2],
+            'phrygian': [1, 16/15, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
+            'lydian': [1, 9/8, 5/4, 45/32, 3/2, 5/3, 15/8, 2],
+            'mixolydian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 16/9, 2],
+            'aeolian': [1, 9/8, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
+            'locrian': [1, 16/15, 6/5, 4/3, 64/45, 8/5, 9/5, 2],
+        }
+        return mapping.get(mode.lower(), mapping['ionian'])
         
     def _sync_to_device(self):
         """Synchronize node data to device memory."""
@@ -232,18 +244,24 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             
         return audio
         
-    def morph_between_modes_accelerated(self, target_mode: str, 
+    def morph_between_modes_accelerated(self, target_mode: str,
                                        morph_time: float = 1.0,
                                        sample_rate: float = 44100) -> np.ndarray:
         """
         Accelerated mode morphing using device computation.
         """
-        if self.mode_detector is None:
-            raise ValueError("Mode detector required for mode morphing")
-            
-        # Get intervals
-        current_intervals = self.mode_detector.mode_intervals[self.mode]
-        target_intervals = self.mode_detector.mode_intervals[target_mode]
+        # Support legacy argument order where current_mode was passed first
+        if isinstance(morph_time, str):
+            target_mode = morph_time
+            morph_time = sample_rate
+            sample_rate = 44100
+
+        if self.mode_detector is not None:
+            current_intervals = self.mode_detector.mode_intervals[self.mode]
+            target_intervals = self.mode_detector.mode_intervals[target_mode]
+        else:
+            current_intervals = self._get_mode_intervals(self.mode)
+            target_intervals = self._get_mode_intervals(target_mode)
         
         # Prepare intervals
         max_len = max(len(current_intervals), len(target_intervals))
@@ -318,7 +336,7 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             'fundamental': freqs[np.argmax(magnitudes[:len(magnitudes)//2])]
         }
         
-    def batch_process_signals(self, signals: List[np.ndarray], 
+    def batch_process_signals(self, signals: List[np.ndarray],
                             operation: str = "analyze") -> List[Any]:
         """
         Process multiple signals in parallel using device acceleration.
@@ -330,6 +348,10 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         Returns:
             List of results
         """
+        # Support legacy call where sample_rate was passed instead of operation
+        if isinstance(operation, (int, float)):
+            operation = "analyze"
+
         # Stack signals for batch processing
         max_len = max(len(sig) for sig in signals)
         padded_signals = np.zeros((len(signals), max_len), dtype=np.float32)
