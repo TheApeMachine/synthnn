@@ -6,9 +6,11 @@ with the performance benefits of the acceleration backends.
 """
 
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
+import warnings
+from typing import Dict, Optional, Any
 
 from .musical_extensions import MusicalResonantNetwork
+from .musical_constants import MODE_INTERVALS
 from ..performance import BackendManager, BackendType
 
 
@@ -50,17 +52,9 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         
         print(f"AcceleratedMusicalNetwork initialized with {type(self.backend).__name__}")
 
-    def _get_mode_intervals(self, mode: str) -> List[float]:
-        mapping = {
-            'ionian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2],
-            'dorian': [1, 9/8, 6/5, 4/3, 3/2, 5/3, 9/5, 2],
-            'phrygian': [1, 16/15, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
-            'lydian': [1, 9/8, 5/4, 45/32, 3/2, 5/3, 15/8, 2],
-            'mixolydian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 16/9, 2],
-            'aeolian': [1, 9/8, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
-            'locrian': [1, 16/15, 6/5, 4/3, 64/45, 8/5, 9/5, 2],
-        }
-        return mapping.get(mode.lower(), mapping['ionian'])
+    def _get_mode_intervals(self, mode: str) -> list[float]:
+        """Return mode intervals if mode detector is missing."""
+        return MODE_INTERVALS.get(mode.lower(), MODE_INTERVALS['ionian'])
         
     def _sync_to_device(self):
         """Synchronize node data to device memory."""
@@ -251,15 +245,24 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         Accelerated mode morphing using device computation.
         """
         # Support legacy argument order where current_mode was passed first
-        if isinstance(morph_time, str):
+        if isinstance(morph_time, str) and isinstance(sample_rate, (int, float)):
             target_mode = morph_time
             morph_time = sample_rate
             sample_rate = 44100
+        elif isinstance(morph_time, str):
+            raise ValueError(
+                "Invalid arguments: if target_mode is string, morph_time must be numeric"
+            )
 
         if self.mode_detector is not None:
             current_intervals = self.mode_detector.mode_intervals[self.mode]
             target_intervals = self.mode_detector.mode_intervals[target_mode]
         else:
+            warnings.warn(
+                "Mode detector missing; using default mode intervals",
+                RuntimeWarning,
+            )
+
             current_intervals = self._get_mode_intervals(self.mode)
             target_intervals = self._get_mode_intervals(target_mode)
         
@@ -336,8 +339,9 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
             'fundamental': freqs[np.argmax(magnitudes[:len(magnitudes)//2])]
         }
         
-    def batch_process_signals(self, signals: List[np.ndarray],
-                            operation: str = "analyze") -> List[Any]:
+
+    def batch_process_signals(self, signals: list[np.ndarray],
+                            operation: str = "analyze") -> list[Any]:
         """
         Process multiple signals in parallel using device acceleration.
         
@@ -350,6 +354,11 @@ class AcceleratedMusicalNetwork(MusicalResonantNetwork):
         """
         # Support legacy call where sample_rate was passed instead of operation
         if isinstance(operation, (int, float)):
+            warnings.warn(
+                "Legacy argument order detected in batch_process_signals",
+                DeprecationWarning,
+            )
+
             operation = "analyze"
 
         # Stack signals for batch processing

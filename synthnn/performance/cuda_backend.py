@@ -19,7 +19,7 @@ class CUDABackend(ComputeBackend):
         self.torch_cuda_available = False
 
     @property
-    def backend_type(self):
+    def backend_type(self) -> "BackendType":
         from .backend import BackendType
         return BackendType.CUDA
         

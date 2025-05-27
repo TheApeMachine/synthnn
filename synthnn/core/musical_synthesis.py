@@ -14,6 +14,7 @@ from scipy import interpolate
 
 from .resonant_node import ResonantNode
 from .resonant_network import ResonantNetwork
+from .musical_constants import MODE_INTERVALS
 
 
 class WaveShape(Enum):
@@ -449,18 +450,8 @@ class MusicalResonantNetwork(ResonantNetwork):
         self.mode_intervals = self._get_mode_intervals(mode)
         
     def _get_mode_intervals(self, mode: str) -> List[float]:
-        """Get frequency ratios for musical modes."""
-        mode_intervals = {
-            'ionian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2],     # Major
-            'dorian': [1, 9/8, 6/5, 4/3, 3/2, 5/3, 9/5, 2],
-            'phrygian': [1, 16/15, 6/5, 4/3, 3/2, 8/5, 9/5, 2],
-            'lydian': [1, 9/8, 5/4, 45/32, 3/2, 5/3, 15/8, 2],
-            'mixolydian': [1, 9/8, 5/4, 4/3, 3/2, 5/3, 16/9, 2],
-            'aeolian': [1, 9/8, 6/5, 4/3, 3/2, 8/5, 9/5, 2],     # Natural minor
-            'locrian': [1, 16/15, 6/5, 4/3, 64/45, 8/5, 9/5, 2]
-        }
-        
-        return mode_intervals.get(mode.lower(), mode_intervals['ionian'])
+        """Return frequency ratios for a musical mode."""
+        return MODE_INTERVALS.get(mode.lower(), MODE_INTERVALS['ionian'])
         
     def add_musical_node(self, degree: int, octave: int = 0) -> MusicalNode:
         """Add a musical node at a specific scale degree."""

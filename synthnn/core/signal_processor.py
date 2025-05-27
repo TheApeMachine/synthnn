@@ -226,16 +226,32 @@ class SignalProcessor:
     def detect_anomalies(self, signal_data: np.ndarray,
                           window_size: int = 1000,
                           threshold_factor: float = 3.0) -> np.ndarray:
-        """Detect anomalies in a time series using a rolling z-score method."""
+        """Detect anomalies in a time series using a rolling z-score method.
 
+        Args:
+            signal_data: Input signal array.
+            window_size: Size of the rolling window used for statistics.
+            threshold_factor: Z-score threshold for anomaly detection.
+
+        Returns:
+            Boolean array indicating anomaly locations.
+        """
+
+        # Input validation
+        if len(signal_data) == 0:
+            return np.array([], dtype=bool)
+        if np.any(np.isnan(signal_data)):
+            raise ValueError("Signal contains NaN values")
         if window_size <= 1:
             return np.zeros_like(signal_data, dtype=bool)
+        if window_size > len(signal_data):
+            window_size = len(signal_data)
 
         kernel = np.ones(window_size) / window_size
         mean = np.convolve(signal_data, kernel, mode="same")
         sq_mean = np.convolve(signal_data ** 2, kernel, mode="same")
-        std = np.sqrt(np.maximum(sq_mean - mean ** 2, 1e-8))
-
+        eps = np.finfo(signal_data.dtype).eps * np.abs(signal_data).max() * 10
+        std = np.sqrt(np.maximum(sq_mean - mean ** 2, eps))
         z_scores = np.abs(signal_data - mean) / std
         return z_scores > threshold_factor
     

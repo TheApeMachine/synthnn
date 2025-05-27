@@ -23,7 +23,7 @@ class CPUBackend(ComputeBackend):
         self.num_threads = multiprocessing.cpu_count()
 
     @property
-    def backend_type(self):
+    def backend_type(self) -> "BackendType":
         from .backend import BackendType
         return BackendType.CPU
         
