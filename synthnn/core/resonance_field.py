@@ -30,11 +30,17 @@ class BoundaryCondition(Enum):
 class FieldPoint:
     """Represents a point in the resonance field."""
     position: np.ndarray      # 3D position [x, y, z]
-    amplitude: float          # Wave amplitude at this point
-    phase: float             # Wave phase at this point
-    frequency: float         # Local oscillation frequency
-    velocity: np.ndarray     # Wave velocity vector [vx, vy, vz]
-    damping: float          # Local damping factor
+    signal: complex           # Complex wave value at this point
+    velocity: np.ndarray      # Wave velocity vector [vx, vy, vz]
+    damping: float            # Local damping factor
+    
+    @property
+    def amplitude(self) -> float:
+        return abs(self.signal)
+        
+    @property
+    def phase(self) -> float:
+        return np.angle(self.signal)
 
 
 class SpatialResonantNode(ResonantNode):
@@ -58,43 +64,22 @@ class SpatialResonantNode(ResonantNode):
             damping: Damping factor
             radiation_pattern: How the node radiates ("omnidirectional", "dipole", "quadrupole")
         """
-        super().__init__(node_id, frequency, phase, amplitude, damping)
+        super().__init__(node_id, frequency=frequency, phase=phase, amplitude=amplitude, damping=damping)
         self.position = np.array(position)
         self.radiation_pattern = radiation_pattern
-        self.wave_sources = []  # Track waves emanating from this node
         
-    def radiate(self, time: float) -> Dict[str, Union[float, np.ndarray]]:
+    def radiate(self) -> complex:
         """
-        Calculate radiation from this node based on its pattern.
+        Calculate the complex radiation from this node.
         
         Returns:
-            Dictionary with 'amplitude', 'phase', and 'direction' information
+            A complex value representing the wave source.
         """
-        base_signal = self.oscillate(time)
-        
-        if self.radiation_pattern == "omnidirectional":
-            # Radiates equally in all directions
-            return {
-                'amplitude': base_signal,
-                'phase': self.phase,
-                'direction': None  # No preferred direction
-            }
-        elif self.radiation_pattern == "dipole":
-            # Radiates along a preferred axis (like a speaker)
-            dipole_axis = np.array([0, 0, 1])  # Default z-axis
-            return {
-                'amplitude': base_signal,
-                'phase': self.phase,
-                'direction': dipole_axis
-            }
-        elif self.radiation_pattern == "quadrupole":
-            # More complex radiation pattern
-            return {
-                'amplitude': base_signal,
-                'phase': self.phase,
-                'direction': 'quadrupole'  # Special handling needed
-            }
-        
+        # The radiation is simply the node's current signal.
+        # Directional patterns would modify this complex value.
+        # For now, we assume omnidirectional radiation.
+        return self.signal
+
 
 class ResonanceField4D:
     """
@@ -121,14 +106,11 @@ class ResonanceField4D:
         self.wave_speed = wave_speed
         self.boundary_condition = boundary_condition
         
-        # Initialize field arrays
-        self.amplitude_field = np.zeros(dimensions)
-        self.phase_field = np.zeros(dimensions)
-        self.velocity_field = np.zeros(dimensions + (3,))  # 3D velocity at each point
+        # A single complex field for the wave state (amplitude and phase)
+        self.signal_field = np.zeros(dimensions, dtype=np.complex128)
         
-        # Previous state for wave equation
-        self.amplitude_prev = np.zeros(dimensions)
-        self.amplitude_prev2 = np.zeros(dimensions)
+        # Previous states for the wave equation solver
+        self.signal_prev = np.zeros(dimensions, dtype=np.complex128)
         
         # Medium properties
         self.medium = medium_properties or {
@@ -156,8 +138,7 @@ class ResonanceField4D:
         
         # Initialize field at node position
         if self._in_bounds(grid_pos):
-            self.amplitude_field[grid_pos] = node.amplitude
-            self.phase_field[grid_pos] = node.phase
+            self.signal_field[grid_pos] = node.signal
             
     def _position_to_grid(self, position: np.ndarray) -> Tuple[int, int, int]:
         """Convert continuous position to grid indices."""
@@ -174,57 +155,53 @@ class ResonanceField4D:
         
     def step(self, dt: Optional[float] = None) -> None:
         """
-        Advance the field by one time step using wave equation.
+        Advance the field by one time step using the complex wave equation.
         
-        Uses the 3D wave equation:
+        Uses the 3D wave equation on a complex field `u`:
         ∂²u/∂t² = c²∇²u - γ∂u/∂t
-        
-        where u is amplitude, c is wave speed, and γ is damping.
         """
         if dt is None:
             dt = self.dt
             
-        # Update node states and inject energy into field
+        # Update node states and inject their signals into the field
         for node in self.nodes.values():
-            node.update_phase(dt)
+            # Nodes evolve on their own (internal frequency + damping)
+            node.step(dt) 
             grid_pos = self._position_to_grid(node.position)
             
             if self._in_bounds(grid_pos):
-                # Inject node's signal into field
-                radiation = node.radiate(self.time)
-                self.amplitude_field[grid_pos] += radiation['amplitude'] * dt
+                # Inject node's signal into the field, acting as a source term
+                self.signal_field[grid_pos] += node.radiate() * dt
                 
-        # Compute Laplacian (∇²u) using finite differences
-        laplacian = self._compute_laplacian(self.amplitude_field)
+        # Compute Laplacian (∇²u) on the complex field
+        laplacian = self._compute_laplacian(self.signal_field)
         
-        # Wave equation with damping
-        # u(t+dt) = 2u(t) - u(t-dt) + (c²dt²)∇²u - γdt(u(t) - u(t-dt))
+        # Store current state before update
+        signal_current = self.signal_field.copy()
+
+        # Wave equation with damping for a complex field
         c2dt2 = (self.wave_speed * dt) ** 2
         damping = self.medium['absorption'] * dt
         
-        new_amplitude = (
-            2 * self.amplitude_field 
-            - self.amplitude_prev2
+        # Verlet integration for the wave equation
+        new_signal = (
+            (2 - damping) * self.signal_field 
+            - (1 - damping) * self.signal_prev
             + c2dt2 * laplacian
-            - damping * (self.amplitude_field - self.amplitude_prev2)
         )
         
         # Apply boundary conditions
-        self._apply_boundary_conditions(new_amplitude)
+        self._apply_boundary_conditions(new_signal)
         
-        # Update field states
-        self.amplitude_prev2 = self.amplitude_prev.copy()
-        self.amplitude_prev = self.amplitude_field.copy()
-        self.amplitude_field = new_amplitude
-        
-        # Update phase field based on local frequency gradients
-        self._update_phase_field(dt)
+        # Update field states for the next iteration
+        self.signal_prev = signal_current
+        self.signal_field = new_signal
         
         # Increment time
         self.time += dt
         
     def _compute_laplacian(self, field: np.ndarray) -> np.ndarray:
-        """Compute 3D Laplacian using finite differences."""
+        """Compute 3D Laplacian using finite differences on a complex field."""
         if self.boundary_condition == BoundaryCondition.PERIODIC:
             mode = 'wrap'
         elif self.boundary_condition == BoundaryCondition.REFLECTING:
@@ -250,100 +227,23 @@ class ResonanceField4D:
                     elif dim == 1:
                         field[:, i, :] *= factor
                         field[:, -i-1, :] *= factor
-                    else:
+                    elif dim == 2:
                         field[:, :, i] *= factor
                         field[:, :, -i-1] *= factor
                         
         elif self.boundary_condition == BoundaryCondition.RADIATING:
-            # Sommerfeld radiation condition
-            # Waves should propagate outward without reflection
-            # This is a simplified implementation
-            boundary_damping = 0.9
-            field[0, :, :] *= boundary_damping
-            field[-1, :, :] *= boundary_damping
-            field[:, 0, :] *= boundary_damping
-            field[:, -1, :] *= boundary_damping
-            field[:, :, 0] *= boundary_damping
-            field[:, :, -1] *= boundary_damping
-            
-    def _update_phase_field(self, dt: float) -> None:
-        """Update phase field based on local wave propagation."""
-        # Simplified phase update based on local frequency
-        # In reality, this would involve solving the eikonal equation
-        freq_field = self._estimate_local_frequency()
-        self.phase_field += 2 * np.pi * freq_field * dt
-        self.phase_field = self.phase_field % (2 * np.pi)
+            # Simple radiating boundary (Sommerfeld condition)
+            # Not fully implemented here, requires more complex stencil
+            pass
         
-    def _estimate_local_frequency(self) -> np.ndarray:
-        """Estimate local frequency from amplitude changes."""
-        # Simple estimation based on zero-crossings
-        # More sophisticated methods could use Hilbert transform
-        time_derivative = (self.amplitude_field - self.amplitude_prev) / self.dt
-        
-        # Avoid division by zero
-        safe_amplitude = np.maximum(np.abs(self.amplitude_field), 1e-10)
-        
-        # Rough frequency estimate
-        freq_estimate = np.abs(time_derivative) / (2 * np.pi * safe_amplitude)
-        
-        # Smooth the estimate
-        freq_estimate = ndimage.gaussian_filter(freq_estimate, sigma=1.0)
-        
-        return np.clip(freq_estimate, 0, 1000)  # Reasonable frequency range
-        
-    def create_resonant_cavity(self, center: np.ndarray, 
-                             dimensions: np.ndarray,
-                             impedance_ratio: float = 10.0) -> None:
-        """
-        Create a resonant cavity with different medium properties.
-        
-        Args:
-            center: Center position of cavity
-            dimensions: Size of cavity [dx, dy, dz]
-            impedance_ratio: Impedance inside vs outside cavity
-        """
-        grid_center = self._position_to_grid(center)
-        grid_dims = (dimensions / self.resolution).astype(int)
-        
-        # Create cavity boundaries with higher impedance
-        for i in range(max(0, grid_center[0] - grid_dims[0]//2),
-                      min(self.dimensions[0], grid_center[0] + grid_dims[0]//2)):
-            for j in range(max(0, grid_center[1] - grid_dims[1]//2),
-                          min(self.dimensions[1], grid_center[1] + grid_dims[1]//2)):
-                for k in range(max(0, grid_center[2] - grid_dims[2]//2),
-                              min(self.dimensions[2], grid_center[2] + grid_dims[2]//2)):
-                    # Check if on boundary of cavity
-                    on_boundary = (
-                        i == grid_center[0] - grid_dims[0]//2 or
-                        i == grid_center[0] + grid_dims[0]//2 - 1 or
-                        j == grid_center[1] - grid_dims[1]//2 or
-                        j == grid_center[1] + grid_dims[1]//2 - 1 or
-                        k == grid_center[2] - grid_dims[2]//2 or
-                        k == grid_center[2] + grid_dims[2]//2 - 1
-                    )
-                    
-                    if on_boundary:
-                        self.medium['impedance'][i, j, k] = impedance_ratio
-                        self.medium['absorption'][i, j, k] = 0.1  # Some absorption
-                        
     def measure_field_energy(self) -> float:
-        """Calculate total energy in the field."""
-        # Kinetic energy: (1/2) * density * (du/dt)²
-        time_derivative = (self.amplitude_field - self.amplitude_prev) / self.dt
-        kinetic = 0.5 * np.sum(self.medium['density'] * time_derivative**2)
+        """
+        Calculate the total energy in the field.
         
-        # Potential energy from spatial gradients
-        grad_x = np.gradient(self.amplitude_field, axis=0)
-        grad_y = np.gradient(self.amplitude_field, axis=1)
-        grad_z = np.gradient(self.amplitude_field, axis=2)
-        
-        # Sum of squared gradients
-        grad_squared = grad_x**2 + grad_y**2 + grad_z**2
-        potential = 0.5 * self.wave_speed**2 * np.sum(grad_squared)
-        
-        # Return as Python float
-        total_energy = kinetic + potential
-        return float(total_energy.item() if hasattr(total_energy, 'item') else total_energy)
+        Energy is proportional to the squared amplitude of the signal.
+        """
+        # Energy is integral of |signal|^2 over the volume
+        return 0.5 * np.sum(np.abs(self.signal_field)**2) * (self.resolution**3)
         
     def find_resonant_modes(self, frequency_range: Tuple[float, float],
                            num_modes: int = 10) -> List[Dict]:
@@ -355,7 +255,7 @@ class ResonanceField4D:
             num_modes: Number of modes to find
             
         Returns:
-            List of dicts with 'frequency', 'amplitude_pattern', 'q_factor'
+            List of dicts with 'frequency', 'amplitude_pattern', 'phase_pattern', 'q_factor'
         """
         modes = []
         
@@ -376,17 +276,18 @@ class ResonanceField4D:
             
             # Let field evolve
             initial_energy = self.measure_field_energy()
-            for _ in range(int(10 / test_freq / self.dt)):  # 10 periods
+            for _ in range(int(10 / (test_freq + 1e-6) / self.dt)):  # 10 periods
                 self.step()
                 
             # Measure response
             final_energy = self.measure_field_energy()
             
-            if final_energy > initial_energy * 2:  # Resonance amplification
+            if final_energy > initial_energy * 1.5:  # Resonance amplification
                 mode = {
                     'frequency': test_freq,
-                    'amplitude_pattern': self.amplitude_field.copy(),
-                    'q_factor': final_energy / initial_energy
+                    'amplitude_pattern': np.abs(self.signal_field.copy()),
+                    'phase_pattern': np.angle(self.signal_field.copy()),
+                    'q_factor': final_energy / (initial_energy + 1e-9)
                 }
                 modes.append(mode)
                 
@@ -394,9 +295,8 @@ class ResonanceField4D:
             del self.nodes["test"]
             
             # Reset field
-            self.amplitude_field.fill(0)
-            self.amplitude_prev.fill(0)
-            self.amplitude_prev2.fill(0)
+            self.signal_field.fill(0j)
+            self.signal_prev.fill(0j)
             
         # Sort by Q factor and return top modes
         modes.sort(key=lambda m: m['q_factor'], reverse=True)
@@ -411,44 +311,45 @@ class ResonanceField4D:
             wavelength: Wavelength of the standing wave
             direction: Direction vector [dx, dy, dz]
         """
-        direction = direction / np.linalg.norm(direction)  # Normalize
+        direction = direction / np.linalg.norm(direction)
+        k = 2 * np.pi / wavelength  # Wave number
         
-        for i in range(self.dimensions[0]):
-            for j in range(self.dimensions[1]):
-                for k in range(self.dimensions[2]):
-                    position = self._grid_to_position((i, j, k))
-                    
-                    # Project position onto direction
-                    distance_along = np.dot(position, direction)
-                    
-                    # Create standing wave
-                    self.amplitude_field[i, j, k] = np.sin(
-                        2 * np.pi * distance_along / wavelength
-                    )
-                    
+        # Create a grid of positions
+        x = np.arange(self.dimensions[0]) * self.resolution
+        y = np.arange(self.dimensions[1]) * self.resolution
+        z = np.arange(self.dimensions[2]) * self.resolution
+        xx, yy, zz = np.meshgrid(x, y, z, indexing='ij')
+        
+        positions = np.stack([xx, yy, zz], axis=-1)
+        
+        # Projection of position onto direction vector
+        projection = np.dot(positions, direction)
+        
+        # Create standing wave: A * cos(k*x)
+        self.signal_field = np.cos(k * projection)
+        
     def extract_slice(self, axis: str = 'z', index: Optional[int] = None) -> np.ndarray:
         """
-        Extract a 2D slice of the field for visualization.
+        Extract a 2D slice of the complex field.
         
         Args:
-            axis: Which axis to slice along ('x', 'y', or 'z')
-            index: Index along the axis (default: middle)
+            axis: 'x', 'y', or 'z'
+            index: Slice index (defaults to center)
             
         Returns:
-            2D array of field values
+            2D numpy array of the complex field slice
         """
         if index is None:
-            # Use middle slice
-            axis_map = {'x': 0, 'y': 1, 'z': 2}
-            axis_idx = axis_map[axis]
-            index = self.dimensions[axis_idx] // 2
+            if axis == 'x': index = self.dimensions[0] // 2
+            if axis == 'y': index = self.dimensions[1] // 2
+            if axis == 'z': index = self.dimensions[2] // 2
             
         if axis == 'x':
-            return self.amplitude_field[index, :, :]
+            return self.signal_field[index, :, :]
         elif axis == 'y':
-            return self.amplitude_field[:, index, :]
-        else:  # z
-            return self.amplitude_field[:, :, index]
+            return self.signal_field[:, index, :]
+        else: # z
+            return self.signal_field[:, :, index]
             
     def create_holographic_pattern(self, target_pattern: np.ndarray,
                                   recording_plane_z: int) -> None:
@@ -459,62 +360,51 @@ class ResonanceField4D:
             target_pattern: 2D pattern to reconstruct
             recording_plane_z: Z-index of the recording plane
         """
-        # This is a simplified holography simulation
-        # Real holography would involve more complex calculations
+        target_fft = np.fft.fft2(target_pattern)
         
-        # Reference wave (plane wave)
-        ref_wavelength = 10 * self.resolution
+        # Back-propagate this field to the origin (z=0)
+        # This is a simplified model (Fraunhofer diffraction)
+        # A full implementation would use Rayleigh-Sommerfeld propagation.
         
-        for i in range(self.dimensions[0]):
-            for j in range(self.dimensions[1]):
-                # Object wave from target pattern
-                if i < target_pattern.shape[0] and j < target_pattern.shape[1]:
-                    object_amplitude = target_pattern[i, j]
-                else:
-                    object_amplitude = 0
-                    
-                # Reference wave
-                ref_phase = 2 * np.pi * i / ref_wavelength
-                ref_amplitude = 1.0
-                
-                # Interference pattern
-                interference = object_amplitude + ref_amplitude * np.cos(ref_phase)
-                
-                self.amplitude_field[i, j, recording_plane_z] = interference
-                
+        # For simplicity, we just set the field to the target pattern at the plane
+        if recording_plane_z < self.dimensions[2]:
+            self.signal_field[:, :, recording_plane_z] = target_pattern
+        
     def get_field_statistics(self) -> Dict[str, float]:
-        """Get various statistics about the current field state."""
+        """Get statistics about the current state of the field."""
+        mean_amplitude = np.mean(np.abs(self.signal_field))
+        max_amplitude = np.max(np.abs(self.signal_field))
+        total_energy = self.measure_field_energy()
+        
         return {
-            'total_energy': self.measure_field_energy(),
-            'max_amplitude': np.max(np.abs(self.amplitude_field)),
-            'mean_amplitude': np.mean(np.abs(self.amplitude_field)),
-            'coherence': self._measure_spatial_coherence(),
+            'mean_amplitude': mean_amplitude,
+            'max_amplitude': max_amplitude,
+            'total_energy': total_energy,
+            'spatial_coherence': self._measure_spatial_coherence(),
             'entropy': self._calculate_field_entropy()
         }
         
     def _measure_spatial_coherence(self) -> float:
-        """Measure spatial coherence of the field."""
-        # Use spatial autocorrelation as a measure of coherence
-        field_normalized = self.amplitude_field / (np.max(np.abs(self.amplitude_field)) + 1e-10)
+        """Measure the spatial coherence of the field."""
+        # A simple measure: correlation of field with a shifted version
+        shifted_field = np.roll(self.signal_field, 1, axis=0)
         
-        # Compute autocorrelation for small shifts
-        coherence = 0
-        for shift in [(1, 0, 0), (0, 1, 0), (0, 0, 1)]:
-            shifted = np.roll(field_normalized, shift, axis=(0, 1, 2))
-            coherence += np.mean(field_normalized * shifted)
-            
-        return coherence / 3
+        # Normalized correlation
+        corr = np.sum(self.signal_field * np.conj(shifted_field))
+        norm = np.sqrt(np.sum(np.abs(self.signal_field)**2) * np.sum(np.abs(shifted_field)**2))
+        
+        return np.abs(corr / norm) if norm > 0 else 0.0
         
     def _calculate_field_entropy(self) -> float:
-        """Calculate entropy of the amplitude distribution."""
-        # Discretize amplitudes
-        hist, _ = np.histogram(self.amplitude_field.flatten(), bins=50)
+        """Calculate the spectral entropy of the field's amplitude distribution."""
+        amplitudes = np.abs(self.signal_field).flatten()
         
-        # Normalize to probability distribution
-        prob = hist / np.sum(hist)
-        prob = prob[prob > 0]  # Remove zeros
+        if np.sum(amplitudes) == 0:
+            return 0.0
+            
+        # Create a probability distribution from amplitudes
+        prob_dist = amplitudes / np.sum(amplitudes)
+        prob_dist = prob_dist[prob_dist > 0]  # Avoid log(0)
         
         # Shannon entropy
-        entropy = -np.sum(prob * np.log2(prob))
-        
-        return entropy 
+        return -np.sum(prob_dist * np.log2(prob_dist)) 

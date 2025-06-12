@@ -80,48 +80,61 @@ class MusicalResonantNetwork(ResonantNetwork):
             
     def compute_harmonic_state(self, duration: float, sample_rate: float = 44100) -> np.ndarray:
         """
-        Compute the pure harmonic output of the network.
+        Compute the pure harmonic output by stepping through the simulation.
         
         Returns:
-            Array of summed network output
+            An array representing the summed, real-valued network output over time.
         """
         num_samples = int(duration * sample_rate)
-        time_steps = np.linspace(0, duration, num_samples)
+        dt = 1.0 / sample_rate
         
-        self.harmonic_outputs = []
+        output_signal = np.zeros(num_samples)
         
-        for t in time_steps:
-            # Get signals from all nodes
-            signals = self.get_signals()
-            node_outputs = list(signals.values())
-            self.harmonic_outputs.append(node_outputs)
+        for i in range(num_samples):
+            # Advance the network by one time step
+            self.step(dt)
             
-        # Return summed output
-        return np.sum(self.harmonic_outputs, axis=1)
+            # Get the complex signals from all nodes
+            signals = self.get_signals()
+            
+            # Sum the signals and store the real part as the audio output
+            total_signal = sum(signals.values())
+            output_signal[i] = total_signal.real
+            
+        self.harmonic_outputs = output_signal.tolist()
+        return output_signal
     
     def compute_dissonant_state(self, duration: float, foreign_signal: np.ndarray,
                                sample_rate: float = 44100) -> np.ndarray:
         """
-        Compute network output with foreign signal interference.
+        Compute network output with a foreign signal driving the network.
         """
         num_samples = int(duration * sample_rate)
-        time_steps = np.linspace(0, duration, num_samples)
+        dt = 1.0 / sample_rate
         
-        self.dissonant_outputs = []
-        
+        output_signal = np.zeros(num_samples)
+
         # Ensure foreign_signal matches our time steps
         if len(foreign_signal) != num_samples:
-            # Resample if needed
             foreign_signal = self.signal_processor.resample(
                 foreign_signal, len(foreign_signal), num_samples
             )
         
-        for i, t in enumerate(time_steps):
-            signals = self.get_signals()
-            node_outputs = [sig + foreign_signal[i] for sig in signals.values()]
-            self.dissonant_outputs.append(node_outputs)
+        for i in range(num_samples):
+            # The foreign signal acts as an external input to all nodes
+            # We can model this as a complex input, but a real-valued one is simpler
+            external_inputs = {
+                node_id: complex(foreign_signal[i], 0) for node_id in self.nodes
+            }
             
-        return np.sum(self.dissonant_outputs, axis=1)
+            self.step(dt, external_inputs=external_inputs)
+            
+            signals = self.get_signals()
+            total_signal = sum(signals.values())
+            output_signal[i] = total_signal.real
+            
+        self.dissonant_outputs = output_signal.tolist()
+        return output_signal
     
     def analyze_and_retune(self, foreign_signal: np.ndarray, 
                           sample_rate: float = 44100) -> str:
@@ -192,6 +205,7 @@ class MusicalResonantNetwork(ResonantNetwork):
         
         # Convert semitones to frequency ratio
         ratio = 2 ** (bend_amount / 12.0)
+        # Use the frequency property for backward compatibility
         new_freq = node.frequency * ratio
         node.retune(new_freq)
         
@@ -249,21 +263,19 @@ class MusicalResonantNetwork(ResonantNetwork):
         """
         output = []
         
-        for chord in chords:
-            if isinstance(chord, str):
-                chord_ratios = ROMAN_CHORD_MAP.get(chord.upper(), [1])
-            else:
-                chord_ratios = chord
+        dt = 1.0 / sample_rate
+        num_steps_per_chord = int(duration_per_chord * sample_rate)
 
-            # Retune network to chord
-            self._retune_to_mode(self.base_freq, chord_ratios)
+        for chord in chords:
+            self._retune_to_mode(self.base_freq, chord)
             
-            # Generate chord audio
-            chord_audio = self.compute_harmonic_state(
-                duration_per_chord, sample_rate
-            )
-            output.extend(chord_audio)
-            
+            for _ in range(num_steps_per_chord):
+                self.step(dt)
+                signals = self.get_signals()
+                total_signal = sum(signals.values())
+                output.append(total_signal.real)
+                
+        self.retuned_outputs = output
         return np.array(output)
     
     def morph_between_modes(self, target_mode: str, morph_time: float = 1.0,
@@ -280,60 +292,55 @@ class MusicalResonantNetwork(ResonantNetwork):
             Audio signal of the morphing process
         """
         if self.mode_detector is None:
-            raise ValueError("Mode detector required for mode morphing")
-            
-        # Get current and target intervals
-        current_intervals = self.mode_detector.mode_intervals[self.mode]
-        target_intervals = self.mode_detector.mode_intervals[target_mode]
+            raise ValueError("Mode detector is required for mode morphing.")
+
+        start_intervals = self.mode_detector.get_intervals(self.mode)
+        end_intervals = self.mode_detector.get_intervals(target_mode)
         
-        # Ensure same length
-        max_len = max(len(current_intervals), len(target_intervals))
-        current_intervals = current_intervals[:max_len] + [1.0] * (max_len - len(current_intervals))
-        target_intervals = target_intervals[:max_len] + [1.0] * (max_len - len(target_intervals))
+        # Ensure interval lists have same length
+        num_nodes = len(self.nodes)
+        if len(start_intervals) < num_nodes:
+            start_intervals.extend([start_intervals[-1]] * (num_nodes - len(start_intervals)))
+        if len(end_intervals) < num_nodes:
+            end_intervals.extend([end_intervals[-1]] * (num_nodes - len(end_intervals)))
+            
+        start_freqs = np.array([self.base_freq * i for i in start_intervals[:num_nodes]])
+        end_freqs = np.array([self.base_freq * i for i in end_intervals[:num_nodes]])
+
+        output = []
+        num_steps = int(morph_time * sample_rate)
+        dt = 1.0 / sample_rate
         
-        # Generate morph
-        num_samples = int(morph_time * sample_rate)
-        output = np.zeros(num_samples)
-        
-        for i in range(num_samples):
-            # Calculate morph factor (0 to 1)
-            morph_factor = i / num_samples
+        for i in range(num_steps):
+            morph_ratio = i / num_steps
             
-            # Interpolate intervals
-            morphed_intervals = [
-                current * (1 - morph_factor) + target * morph_factor
-                for current, target in zip(current_intervals, target_intervals)
-            ]
+            # Interpolate frequencies
+            current_freqs = start_freqs * (1 - morph_ratio) + end_freqs * morph_ratio
             
-            # Retune and compute single sample
-            self._retune_to_mode(self.base_freq, morphed_intervals)
-            
-            # Step network
-            self.step(1.0 / sample_rate)
-            
-            # Sum outputs
+            for j, node_id in enumerate(self.nodes.keys()):
+                self.nodes[node_id].retune(current_freqs[j], rate=1.0) # Instant retune
+                
+            self.step(dt)
             signals = self.get_signals()
-            output[i] = sum(signals.values())
-            
+            total_signal = sum(signals.values())
+            output.append(total_signal.real)
+
+        # Update final mode
         self.mode = target_mode
-        return output
+        
+        return np.array(output)
     
     def save_musical_state(self) -> Dict[str, Any]:
-        """Save network state including musical parameters."""
-        base_state = super().save_state()
+        """Save musical network state."""
+        state = super().save_state()
         
-        musical_state = {
+        state['musical_parameters'] = {
             'base_freq': self.base_freq,
             'mode': self.mode,
             'tuning_system': self.tuning_system,
-            'pitch_bend_range': self.pitch_bend_range,
-            'harmonic_outputs': self.harmonic_outputs,
-            'dissonant_outputs': self.dissonant_outputs,
-            'retuned_outputs': self.retuned_outputs
+            'pitch_bend_range': self.pitch_bend_range
         }
-        
-        base_state['musical_state'] = musical_state
-        return base_state
+        return state
     
     @classmethod
     def load_musical_state(cls, state: Dict[str, Any], 
@@ -342,8 +349,8 @@ class MusicalResonantNetwork(ResonantNetwork):
         # Create base network
         network = cls(
             name=state['name'],
-            base_freq=state['musical_state']['base_freq'],
-            mode=state['musical_state']['mode'],
+            base_freq=state['musical_parameters']['base_freq'],
+            mode=state['musical_parameters']['mode'],
             mode_detector=mode_detector
         )
         
@@ -363,12 +370,9 @@ class MusicalResonantNetwork(ResonantNetwork):
             src, tgt = conn_str.split('->')
             network.connect(src, tgt, conn_data['weight'], conn_data['delay'])
         
-        # Load musical state
-        musical_state = state['musical_state']
-        network.tuning_system = musical_state['tuning_system']
-        network.pitch_bend_range = musical_state['pitch_bend_range']
-        network.harmonic_outputs = musical_state['harmonic_outputs']
-        network.dissonant_outputs = musical_state['dissonant_outputs']
-        network.retuned_outputs = musical_state['retuned_outputs']
+        # Load musical parameters
+        musical_params = state['musical_parameters']
+        network.tuning_system = musical_params['tuning_system']
+        network.pitch_bend_range = musical_params['pitch_bend_range']
         
         return network 

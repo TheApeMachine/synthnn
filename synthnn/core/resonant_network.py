@@ -19,10 +19,10 @@ class Connection:
     def __init__(self, weight: float = 1.0, delay: float = 0.0):
         self.weight = weight
         self.delay = delay
-        self.signal_buffer = []  # For delayed signals
+        self.signal_buffer: List[Tuple[complex, float]] = []  # For delayed signals
     
-    def propagate(self, signal: float, dt: float) -> float:
-        """Propagate signal through connection with optional delay."""
+    def propagate(self, signal: complex, dt: float) -> complex:
+        """Propagate a complex signal through the connection with optional delay."""
         if self.delay <= 0:
             return self.weight * signal
         
@@ -30,7 +30,7 @@ class Connection:
         self.signal_buffer.append((signal, self.delay))
         
         # Process buffer and return delayed signals
-        output = 0.0
+        output = 0j
         remaining = []
         for sig, remaining_delay in self.signal_buffer:
             new_delay = remaining_delay - dt
@@ -107,59 +107,53 @@ class ResonantNetwork:
         """Get all nodes that connect to the given node."""
         return {src for src, tgt in self.connections if tgt == node_id}
     
-    def compute_phase_coupling(self, node_id: str) -> float:
+    def compute_coupling(self, node_id: str, dt: float) -> complex:
         """
-        Compute the total phase coupling influence on a node from its inputs.
+        Compute the total complex coupling influence on a node from its inputs.
         
-        Uses Kuramoto-style coupling with weighted connections.
+        This is a vector sum of the signals from connected nodes, scaled by
+        connection weights and respecting delays.
         """
-        target_node = self.nodes[node_id]
-        coupling = 0.0
+        coupling = 0j
         
         for source_id in self.get_inputs(node_id):
             source_node = self.nodes[source_id]
             connection = self.connections[(source_id, node_id)]
             
-            # Kuramoto coupling: weight * sin(source_phase - target_phase)
-            phase_diff = source_node.phase - target_node.phase
-            signal = np.sin(phase_diff)
-            
-            # Apply connection weight and delay
-            coupling += connection.propagate(signal, self.time)
+            # Propagate the source's full complex signal
+            coupling += connection.propagate(source_node.signal, dt)
         
         return coupling * self.coupling_strength
     
-    def step(self, dt: float, external_inputs: Optional[Dict[str, float]] = None) -> None:
+    def step(self, dt: float, external_inputs: Optional[Dict[str, complex]] = None) -> None:
         """
         Advance the network by one time step.
         
         Args:
             dt: Time step size
-            external_inputs: Optional external signals for specific nodes
+            external_inputs: Optional external complex signals for specific nodes
         """
-        # Apply external inputs
+        # 1. Apply external inputs (as complex stimuli)
         if external_inputs:
             for node_id, signal in external_inputs.items():
                 if node_id in self.nodes:
-                    self.nodes[node_id].apply_stimulus(signal)
+                    # apply_stimulus is now just a complex addition
+                    self.nodes[node_id].signal += signal
         
-        # Compute phase updates for all nodes
-        phase_updates = {}
-        for node_id in self.nodes:
-            coupling = self.compute_phase_coupling(node_id)
-            phase_updates[node_id] = coupling
+        # 2. Compute complex coupling for all nodes based on the state *before* this step
+        couplings = {
+            node_id: self.compute_coupling(node_id, dt)
+            for node_id in self.nodes
+        }
         
-        # Update all nodes
+        # 3. Update all nodes using the pre-computed couplings
         for node_id, node in self.nodes.items():
-            node.update_phase(dt, phase_updates[node_id])
-            
-            # Apply global damping
-            node.amplitude *= (1 - self.global_damping * dt)
+            node.step(dt, coupling=couplings[node_id], damping_override=self.global_damping)
         
-        # Record history
+        # 4. Record history
         self._record_state()
         
-        # Increment time
+        # 5. Increment time
         self.time += dt
     
     def _record_state(self) -> None:
@@ -170,18 +164,19 @@ class ResonantNetwork:
         for node_id, node in self.nodes.items():
             self.history[f'phase_{node_id}'].append(node.phase)
             self.history[f'amplitude_{node_id}'].append(node.amplitude)
-            self.history[f'signal_{node_id}'].append(node.oscillate(self.time))
+            # Store the real part of the signal for simple plotting
+            self.history[f'signal_{node_id}'].append(node.signal.real)
 
         # Record global metrics
         self.history['total_energy'].append(self.measure_total_energy())
     
-    def get_signals(self, node_ids: Optional[List[str]] = None) -> Dict[str, float]:
-        """Get current signals from specified nodes (or all nodes)."""
+    def get_signals(self, node_ids: Optional[List[str]] = None) -> Dict[str, complex]:
+        """Get current complex signals from specified nodes (or all nodes)."""
         if node_ids is None:
             node_ids = list(self.nodes.keys())
         
         return {
-            node_id: self.nodes[node_id].oscillate(self.time)
+            node_id: self.nodes[node_id].signal
             for node_id in node_ids
             if node_id in self.nodes
         }
@@ -198,12 +193,19 @@ class ResonantNetwork:
         if len(node_group) < 2:
             return 1.0
         
-        # Calculate average phase coherence
-        phases = [self.nodes[node_id].phase for node_id in node_group]
+        # Kuramoto order parameter using complex signals directly
+        signals = np.array([
+            self.nodes[node_id].signal 
+            for node_id in node_group 
+            if self.nodes[node_id].amplitude > 0
+        ])
         
-        # Kuramoto order parameter
-        complex_phases = np.exp(1j * np.array(phases))
-        order_param = np.abs(np.mean(complex_phases))
+        if len(signals) < 2:
+            return 1.0
+            
+        # Normalize each signal to a unit vector (phasor)
+        phasors = signals / np.abs(signals)
+        order_param = np.abs(np.mean(phasors))
         
         return order_param
     
@@ -238,9 +240,10 @@ class ResonantNetwork:
         # Add nodes with attributes
         for node_id, node in self.nodes.items():
             G.add_node(node_id, 
-                      frequency=node.frequency,
+                      frequency=node.natural_freq, # Use natural_freq
                       phase=node.phase,
-                      amplitude=node.amplitude)
+                      amplitude=node.amplitude,
+                      signal=node.signal)
         
         # Add edges with weights
         for (src, tgt), conn in self.connections.items():
