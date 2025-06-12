@@ -102,7 +102,8 @@ class MusicalResonantNetwork(ResonantNetwork):
             output_signal[i] = total_signal.real
             
         self.harmonic_outputs = output_signal.tolist()
-        return output_signal
+        # Clip final output to prevent audio artifacts
+        return np.clip(output_signal, -1.0, 1.0)
     
     def compute_dissonant_state(self, duration: float, foreign_signal: np.ndarray,
                                sample_rate: float = 44100) -> np.ndarray:
@@ -134,7 +135,8 @@ class MusicalResonantNetwork(ResonantNetwork):
             output_signal[i] = total_signal.real
             
         self.dissonant_outputs = output_signal.tolist()
-        return output_signal
+        # Clip final output to prevent audio artifacts
+        return np.clip(output_signal, -1.0, 1.0)
     
     def analyze_and_retune(self, foreign_signal: np.ndarray, 
                           sample_rate: float = 44100) -> str:
@@ -276,7 +278,8 @@ class MusicalResonantNetwork(ResonantNetwork):
                 output.append(total_signal.real)
                 
         self.retuned_outputs = output
-        return np.array(output)
+        # Clip final output to prevent audio artifacts
+        return np.clip(np.array(output), -1.0, 1.0)
     
     def morph_between_modes(self, target_mode: str, morph_time: float = 1.0,
                            sample_rate: float = 44100) -> np.ndarray:
@@ -328,7 +331,8 @@ class MusicalResonantNetwork(ResonantNetwork):
         # Update final mode
         self.mode = target_mode
         
-        return np.array(output)
+        # Clip final output to prevent audio artifacts
+        return np.clip(np.array(output), -1.0, 1.0)
     
     def save_musical_state(self) -> Dict[str, Any]:
         """Save musical network state."""

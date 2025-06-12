@@ -52,41 +52,44 @@ class ResonantNode:
         # This is the single source of truth for the node's state
         self.signal = max(0.0, amplitude) * np.exp(1j * (phase % (2 * np.pi)))
 
+    def __getstate__(self) -> Dict[str, Any]:
+        """Prepare the node's state for pickling."""
+        state = self.__dict__.copy()
+        # Add legacy attributes to the state dict for serialization
+        state['frequency'] = self.frequency
+        state['phase'] = self.phase
+        state['amplitude'] = self.amplitude
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]):
+        """Restore the node's state from a pickle."""
+        # Check for the old format where signal was not a primary attribute
+        if 'signal' not in state and 'natural_freq' not in state:
+             # This is a legacy pickle. We reconstruct the complex signal
+             # from the old amplitude, phase, and frequency fields.
+             amplitude = state.get('amplitude', 1.0)
+             phase = state.get('phase', 0.0)
+             state['natural_freq'] = state.get('frequency', 1.0)
+             state['signal'] = max(0.0, amplitude) * np.exp(1j * (phase % (2 * np.pi)))
+        
+        self.__dict__.update(state)
+        # Ensure damping is clipped if it's an old pickle without __post_init__ being called
+        if 'damping' in state:
+             self.damping = np.clip(self.damping, 0.0, 1.0)
+
     # --- Convenience views for legacy compatibility ---
     
-    @property
-    def amplitude(self) -> float:
+    def get_amplitude(self) -> float:
         """Returns the absolute magnitude of the signal."""
         return abs(self.signal)
 
-    @amplitude.setter
-    def amplitude(self, value: float):
-        """Sets the signal's magnitude, preserving its phase."""
-        value = max(0.0, value)
-        if abs(self.signal) > 1e-9:
-            self.signal = self.signal / abs(self.signal) * value
-        else:
-            self.signal = complex(value, 0)
-
-    @property
-    def phase(self) -> float:
+    def get_phase(self) -> float:
         """Returns the phase angle of the signal in radians."""
         return np.angle(self.signal)
 
-    @phase.setter
-    def phase(self, value: float):
-        """Sets the signal's phase, preserving its magnitude."""
-        self.signal = abs(self.signal) * np.exp(1j * value)
-
-    @property
-    def frequency(self) -> float:
+    def get_frequency(self) -> float:
         """Legacy access to natural_freq."""
         return self.natural_freq
-        
-    @frequency.setter
-    def frequency(self, value: float):
-        """Legacy access to set natural_freq."""
-        self.natural_freq = value
         
     # --- Core wave-based evolution ---
 
@@ -152,12 +155,12 @@ class ResonantNode:
         # A simple interpretation: a real-valued push.
         self.signal += sensitivity * stimulus
         # We still clip amplitude to prevent runaway oscillations
-        if self.amplitude > 10.0:
-            self.amplitude = 10.0
+        if self.get_amplitude() > 10.0:
+            self.signal *= 10.0 / self.get_amplitude()
     
     def energy(self) -> float:
         """Calculate the instantaneous energy of the node, proportional to A^2."""
-        return 0.5 * self.amplitude ** 2
+        return 0.5 * self.get_amplitude() ** 2
     
     def sync_measure(self, other: 'ResonantNode') -> float:
         """
@@ -170,11 +173,11 @@ class ResonantNode:
             Synchronization measure (0 = anti-phase, 1 = in-phase).
         """
         # The dot product of normalized vectors gives the cosine of the phase difference
-        if self.amplitude == 0 or other.amplitude == 0:
+        if self.get_amplitude() == 0 or other.get_amplitude() == 0:
             return 0.0
         
         dot_product = np.dot(self.signal.view(np.float64), other.signal.view(np.float64))
-        norm_product = self.amplitude * other.amplitude
+        norm_product = self.get_amplitude() * other.get_amplitude()
         
         cosine_similarity = dot_product / norm_product
         return 0.5 * (1 + cosine_similarity)
@@ -194,9 +197,9 @@ class ResonantNode:
         """Serialize node state to dictionary, preserving legacy format."""
         return {
             'node_id': self.node_id,
-            'frequency': self.frequency,
-            'phase': self.phase,
-            'amplitude': self.amplitude,
+            'frequency': self.get_frequency(),
+            'phase': self.get_phase(),
+            'amplitude': self.get_amplitude(),
             'damping': self.damping,
             'metadata': self.metadata
         }
@@ -208,5 +211,5 @@ class ResonantNode:
         return cls(**data)
     
     def __repr__(self) -> str:
-        return (f"ResonantNode(id={self.node_id}, freq={self.natural_freq:.2f}Hz, "
-                f"amp={self.amplitude:.2f}, phase={self.phase:.2f}rad)") 
+        return (f"ResonantNode(id={self.node_id}, freq={self.get_frequency():.2f}Hz, "
+                f"amp={self.get_amplitude():.2f}, phase={self.get_phase():.2f}rad)") 
