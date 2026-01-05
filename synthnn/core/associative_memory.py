@@ -88,9 +88,9 @@ class RecallResult:
     label: str | None
     index: int | None
     score: float
-    scores: np.ndarray  # (K,)
-    masked_scores: np.ndarray | None  # (K,) or None
-    selection: str  # "full" or "rerank(masked->full)"
+    scores: np.ndarray  # (K,) full-state score (normalized by active units)
+    masked_scores: np.ndarray | None  # (K,) score on known units of final_state (optional)
+    selection: str  # "full" or "rerank(masked_final->full)"
     final_state: np.ndarray  # (N,), complex
     snapped_state: np.ndarray | None  # (N,), complex
     steps_run: int
@@ -213,6 +213,7 @@ class PhaseAssociativeMemory:
         dt: float = 0.02,
         snap: bool = True,
         rerank_top_k: int = 0,
+        use_vectorized_dynamics: bool = True,
         tol: float = 1e-3,
         patience: int = 8,
     ) -> RecallResult:
@@ -236,7 +237,7 @@ class PhaseAssociativeMemory:
             if known.shape != (self.num_units,):
                 raise ValueError(f"mask must have shape ({self.num_units},)")
 
-        def _apply_clamp() -> None:
+        def _apply_clamp(state: np.ndarray) -> None:
             """Apply cue constraints to known units."""
             if not self.clamp_cue:
                 return
@@ -244,60 +245,57 @@ class PhaseAssociativeMemory:
             for i in range(self.num_units):
                 if not known[i]:
                     continue
-                nid = self._node_id(i)
                 if alpha is None or alpha >= 1.0:
                     # Hard clamp: hold exactly at the cue (Dirichlet-like boundary).
-                    self._network.nodes[nid].signal = complex(cue_ph[i])
+                    state[i] = complex(cue_ph[i])
                 else:
                     # Soft clamp: blend current state toward cue.
-                    s = self._network.nodes[nid].signal
-                    self._network.nodes[nid].signal = (1.0 - alpha) * s + alpha * complex(cue_ph[i])
+                    s = state[i]
+                    state[i] = (1.0 - alpha) * s + alpha * complex(cue_ph[i])
 
-        # Initialize node signals from cue; unknown units start at 0 (no direction).
-        for i in range(self.num_units):
-            nid = self._node_id(i)
-            if known[i]:
-                self._network.nodes[nid].signal = complex(cue_ph[i])
-            else:
-                self._network.nodes[nid].signal = 0.0 + 0.0j
+        # Initialize state from cue; unknown units start at 0 (no direction).
+        state = np.zeros(self.num_units, dtype=np.complex128)
+        state[known] = cue_ph[known].astype(np.complex128, copy=False)
+        _apply_clamp(state)
 
-        # Ensure clamped units start exactly on the cue (important if clamp_alpha is used).
-        _apply_clamp()
-
-        prev_state = _project_unit_or_zero(
-            np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128),
-            eps=self.projection_eps,
-        )
+        prev_state = _project_unit_or_zero(state, eps=self.projection_eps)
 
         stable = 0
         converged = False
         last_delta = float("inf")
 
+        if use_vectorized_dynamics:
+            if self._w is None:
+                raise RuntimeError("Internal weight matrix missing. Call store() first.")
+            W = self._w  # (N, N), complex
+
         for t in range(steps):
             # Apply constraints before stepping (so couplings see the constrained boundary).
-            _apply_clamp()
+            _apply_clamp(state)
 
-            self._network.step(float(dt))
+            if use_vectorized_dynamics:
+                # Vectorized substrate dynamics (equivalent to freq=0 network with complex weights).
+                # coupling already includes coupling_strength (matches ResonantNetwork.compute_coupling).
+                coupling = self.coupling_strength * (W @ state)
+                state = state + coupling
+                # global damping in ResonantNetwork.step uses damping_override=self.global_damping
+                state = state * (1.0 - self.damping * float(dt))
+            else:
+                # Fallback to ResonantNetwork substrate (slower).
+                for i in range(self.num_units):
+                    nid = self._node_id(i)
+                    self._network.nodes[nid].signal = complex(state[i])
+                self._network.step(float(dt))
+                state = np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128)
 
-            if self.project_each_step:
-                if (t % self.project_interval) == 0:
-                    for i in range(self.num_units):
-                        nid = self._node_id(i)
-                        self._network.nodes[nid].signal = complex(
-                            _project_unit_or_zero(
-                                np.array([self._network.nodes[nid].signal], dtype=np.complex128),
-                                eps=self.projection_eps,
-                            )[0]
-                        )
+            if self.project_each_step and (t % self.project_interval) == 0:
+                state = _project_unit_or_zero(state, eps=self.projection_eps)
 
             # Re-apply clamp after stepping/projection so known units are truly held fixed
             # during convergence checking and scoring.
-            _apply_clamp()
+            _apply_clamp(state)
 
-            cur_state = _project_unit_or_zero(
-                np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128),
-                eps=self.projection_eps,
-            )
+            cur_state = _project_unit_or_zero(state, eps=self.projection_eps)
 
             last_delta = _mean_phase_delta(cur_state, prev_state, eps=self.projection_eps)
             if last_delta < float(tol):
@@ -316,22 +314,24 @@ class PhaseAssociativeMemory:
 
         final_state = prev_state
 
-        # Score against stored patterns. Use magnitude of inner product to ignore global phase rotation.
+        # Score against stored patterns using magnitude of inner product (global phase invariant).
+        # Normalize by number of *active* units in final_state to avoid penalizing unresolved zeros.
         pats = self._patterns  # (K, N)
-        scores = np.abs(pats.conj() @ final_state) / float(self.num_units)  # (K,)
+        active = np.abs(final_state) > self.projection_eps
+        denom = float(np.sum(active)) if np.any(active) else float(self.num_units)
+        scores = np.abs(pats[:, active].conj() @ final_state[active]) / denom  # (K,)
 
         selection = "full"
         masked_scores: np.ndarray | None = None
 
-        # Optional rerank for partial cues:
-        # 1) score on known dimensions only (invariant to global rotation)
-        # 2) take top-k by masked score
-        # 3) choose the best full-score among those candidates (uses recovered dims as tie-break)
+        # Optional rerank for partial cues (ATTRACTION-SPACE):
+        # 1) score on known dimensions of the *final settled state* (not the raw cue)
+        # 2) take top-k by that masked score
+        # 3) choose the best full-score among those candidates (uses recovered dims as refinement)
         if rerank_top_k and (mask is not None) and np.any(~known) and scores.size:
             m = int(np.sum(known))
             if m > 0:
-                cue_known = cue_ph[known]
-                masked_scores = np.abs(pats[:, known].conj() @ cue_known) / float(m)  # (K,)
+                masked_scores = np.abs(pats[:, known].conj() @ final_state[known]) / float(m)  # (K,)
                 k = int(min(max(int(rerank_top_k), 1), masked_scores.size))
                 # Indices of top-k masked scores (unordered).
                 cand = np.argpartition(masked_scores, -k)[-k:]
@@ -339,17 +339,13 @@ class PhaseAssociativeMemory:
                 best_m = float(np.max(masked_scores[cand]))
                 tie = cand[masked_scores[cand] >= (best_m - 1e-12)]
                 best_idx = int(tie[np.argmax(scores[tie])])
-                selection = "rerank(masked->full)"
+                selection = "rerank(masked_final->full)"
             else:
                 best_idx = int(np.argmax(scores)) if scores.size else None
         else:
             best_idx = int(np.argmax(scores)) if scores.size else None
 
-        best_full_score = float(scores[best_idx]) if best_idx is not None else 0.0
-        if best_idx is not None and selection.startswith("rerank") and masked_scores is not None:
-            best_score = float(masked_scores[best_idx])
-        else:
-            best_score = best_full_score
+        best_score = float(masked_scores[best_idx]) if (best_idx is not None and selection.startswith("rerank") and masked_scores is not None) else (float(scores[best_idx]) if best_idx is not None else 0.0)
         best_label = self._labels[best_idx] if best_idx is not None else None
 
         snapped_state: np.ndarray | None = None

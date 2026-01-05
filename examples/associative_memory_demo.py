@@ -34,7 +34,7 @@ def main() -> None:
     ap.add_argument("--target", type=int, default=-1, help="Target pattern index (0..K-1). -1 picks randomly.")
     ap.add_argument("--noise-std", type=float, default=0.65, help="Phase noise std dev in radians for noisy cue.")
     ap.add_argument("--known-frac", type=float, default=0.28, help="Fraction of units revealed for partial cue.")
-    ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables).")
+    ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables). Uses settled-state masking, not raw cue.")
     ap.add_argument("--steps", type=int, default=500, help="Max settling steps.")
     ap.add_argument("--dt", type=float, default=0.05, help="Time step for settling.")
     args = ap.parse_args()
