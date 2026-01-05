@@ -6,7 +6,7 @@ their connections, and emergent behaviors through phase coupling and resonance.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Set, Any, TYPE_CHECKING
+from typing import Dict, List, Tuple, Optional, Set, Any, TYPE_CHECKING, Union
 from collections import defaultdict
 
 try:
@@ -23,8 +23,9 @@ from .resonant_node import ResonantNode
 class Connection:
     """Represents a weighted, optionally delayed connection between nodes."""
 
-    def __init__(self, weight: float = 1.0, delay: float = 0.0):
-        self.weight = weight
+    def __init__(self, weight: Union[float, complex] = 1.0, delay: float = 0.0):
+        # Weight may be real (typical) or complex (e.g., phasor / holographic coupling).
+        self.weight: complex = complex(weight)
         self.delay = delay
         self.signal_buffer: List[Tuple[complex, float]] = []  # For delayed signals
 
@@ -93,7 +94,7 @@ class ResonantNetwork:
         del self.nodes[node_id]
 
     def connect(self, source_id: str, target_id: str,
-                weight: float = 1.0, delay: float = 0.0) -> None:
+                weight: Union[float, complex] = 1.0, delay: float = 0.0) -> None:
         """Create a connection between two nodes."""
         if source_id not in self.nodes or target_id not in self.nodes:
             raise ValueError("Both nodes must exist in the network")
@@ -173,6 +174,8 @@ class ResonantNetwork:
             self.history[f'amplitude_{node_id}'].append(node.amplitude)
             # Store the real part of the signal for simple plotting
             self.history[f'signal_{node_id}'].append(node.signal.real)
+            # Also store imaginary part for phase-aware analysis (additive; doesn't break existing plots)
+            self.history[f'signal_imag_{node_id}'].append(node.signal.imag)
 
         # Record global metrics
         self.history['total_energy'].append(self.measure_total_energy())
@@ -237,8 +240,17 @@ class ResonantNetwork:
                 weight_change = -self.adaptation_rate * sync_error * np.cos(phase_diff)
 
             # Update weight with bounds
-            connection.weight += weight_change
-            connection.weight = np.clip(connection.weight, -2.0, 2.0)
+            connection.weight += complex(weight_change, 0.0)
+
+            # Clamp safely for real or complex weights.
+            # - Real weights: clamp to [-2, 2] (legacy behavior)
+            # - Complex weights: clamp magnitude to <= 2 (preserve direction in complex plane)
+            if abs(connection.weight.imag) < 1e-15:
+                connection.weight = complex(float(np.clip(connection.weight.real, -2.0, 2.0)), 0.0)
+            else:
+                mag = abs(connection.weight)
+                if mag > 2.0:
+                    connection.weight = connection.weight * (2.0 / mag)
 
     def to_networkx(self) -> "nx.DiGraph":
         """Convert to NetworkX graph for analysis and visualization."""

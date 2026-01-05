@@ -54,13 +54,32 @@ def _project_unit(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
     return out
 
 
-def _mean_phase_delta(a: np.ndarray, b: np.ndarray) -> float:
+def _project_unit_or_zero(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
+    """
+    Project complex vector to unit circle elementwise, but preserve true unknowns.
+
+    Any element with magnitude <= eps is left as 0+0j instead of being biased to 1+0j.
+    """
+    mag = np.abs(x)
+    out = np.zeros_like(x, dtype=np.complex128)
+    nz = mag > eps
+    out[nz] = x[nz] / mag[nz]
+    return out
+
+
+def _mean_phase_delta(a: np.ndarray, b: np.ndarray, *, eps: float = 1e-12) -> float:
     """
     Mean absolute phase change between two complex vectors, ignoring magnitude.
     Returns a value in [0, pi].
     """
-    # angle of a * conj(b) is the phase difference
-    d = np.angle(a * np.conj(b))
+    # If parts of the state are "unknown" (near-zero magnitude), ignore them so we
+    # don't report artificial convergence due to zeros always having angle 0.
+    a = np.asarray(a, dtype=np.complex128)
+    b = np.asarray(b, dtype=np.complex128)
+    valid = (np.abs(a) > eps) & (np.abs(b) > eps)
+    if not np.any(valid):
+        return 0.0
+    d = np.angle(a[valid] * np.conj(b[valid]))
     return float(np.mean(np.abs(d)))
 
 
@@ -70,6 +89,8 @@ class RecallResult:
     index: int | None
     score: float
     scores: np.ndarray  # (K,)
+    masked_scores: np.ndarray | None  # (K,) or None
+    selection: str  # "full" or "rerank(masked->full)"
     final_state: np.ndarray  # (N,), complex
     snapped_state: np.ndarray | None  # (N,), complex
     steps_run: int
@@ -94,6 +115,9 @@ class PhaseAssociativeMemory:
         zero_diag: bool = True,
         clamp_cue: bool = True,
         project_each_step: bool = True,
+        projection_eps: float = 1e-12,
+        project_interval: int = 1,
+        clamp_alpha: float | None = None,
         node_prefix: str = "mem_",
     ):
         self.num_units: int = int(num_units)
@@ -105,6 +129,14 @@ class PhaseAssociativeMemory:
         self.zero_diag: bool = bool(zero_diag)
         self.clamp_cue: bool = bool(clamp_cue)
         self.project_each_step: bool = bool(project_each_step)
+        self.projection_eps: float = float(projection_eps)
+        self.project_interval: int = int(project_interval)
+        if self.project_interval < 1:
+            self.project_interval = 1
+        self.clamp_alpha: float | None = None if clamp_alpha is None else float(clamp_alpha)
+        if self.clamp_alpha is not None:
+            # Soft clamp weight (0..1]. Using 1.0 reproduces a hard override.
+            self.clamp_alpha = float(np.clip(self.clamp_alpha, 0.0, 1.0))
         self.node_prefix: str = str(node_prefix)
 
         self._patterns: np.ndarray | None = None  # (K, N), complex
@@ -180,6 +212,7 @@ class PhaseAssociativeMemory:
         steps: int = 200,
         dt: float = 0.02,
         snap: bool = True,
+        rerank_top_k: int = 0,
         tol: float = 1e-3,
         patience: int = 8,
     ) -> RecallResult:
@@ -203,6 +236,23 @@ class PhaseAssociativeMemory:
             if known.shape != (self.num_units,):
                 raise ValueError(f"mask must have shape ({self.num_units},)")
 
+        def _apply_clamp() -> None:
+            """Apply cue constraints to known units."""
+            if not self.clamp_cue:
+                return
+            alpha = self.clamp_alpha
+            for i in range(self.num_units):
+                if not known[i]:
+                    continue
+                nid = self._node_id(i)
+                if alpha is None or alpha >= 1.0:
+                    # Hard clamp: hold exactly at the cue (Dirichlet-like boundary).
+                    self._network.nodes[nid].signal = complex(cue_ph[i])
+                else:
+                    # Soft clamp: blend current state toward cue.
+                    s = self._network.nodes[nid].signal
+                    self._network.nodes[nid].signal = (1.0 - alpha) * s + alpha * complex(cue_ph[i])
+
         # Initialize node signals from cue; unknown units start at 0 (no direction).
         for i in range(self.num_units):
             nid = self._node_id(i)
@@ -211,30 +261,45 @@ class PhaseAssociativeMemory:
             else:
                 self._network.nodes[nid].signal = 0.0 + 0.0j
 
-        prev_state = _project_unit(np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128))
+        # Ensure clamped units start exactly on the cue (important if clamp_alpha is used).
+        _apply_clamp()
+
+        prev_state = _project_unit_or_zero(
+            np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128),
+            eps=self.projection_eps,
+        )
 
         stable = 0
         converged = False
         last_delta = float("inf")
 
         for t in range(steps):
-            if self.clamp_cue:
-                for i in range(self.num_units):
-                    if known[i]:
-                        self._network.nodes[self._node_id(i)].signal = complex(cue_ph[i])
+            # Apply constraints before stepping (so couplings see the constrained boundary).
+            _apply_clamp()
 
             self._network.step(float(dt))
 
             if self.project_each_step:
-                for i in range(self.num_units):
-                    nid = self._node_id(i)
-                    self._network.nodes[nid].signal = complex(_project_unit(np.array([self._network.nodes[nid].signal]))[0])
+                if (t % self.project_interval) == 0:
+                    for i in range(self.num_units):
+                        nid = self._node_id(i)
+                        self._network.nodes[nid].signal = complex(
+                            _project_unit_or_zero(
+                                np.array([self._network.nodes[nid].signal], dtype=np.complex128),
+                                eps=self.projection_eps,
+                            )[0]
+                        )
 
-            cur_state = _project_unit(
-                np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128)
+            # Re-apply clamp after stepping/projection so known units are truly held fixed
+            # during convergence checking and scoring.
+            _apply_clamp()
+
+            cur_state = _project_unit_or_zero(
+                np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128),
+                eps=self.projection_eps,
             )
 
-            last_delta = _mean_phase_delta(cur_state, prev_state)
+            last_delta = _mean_phase_delta(cur_state, prev_state, eps=self.projection_eps)
             if last_delta < float(tol):
                 stable += 1
                 if stable >= int(patience):
@@ -254,8 +319,37 @@ class PhaseAssociativeMemory:
         # Score against stored patterns. Use magnitude of inner product to ignore global phase rotation.
         pats = self._patterns  # (K, N)
         scores = np.abs(pats.conj() @ final_state) / float(self.num_units)  # (K,)
-        best_idx = int(np.argmax(scores)) if scores.size else None
-        best_score = float(scores[best_idx]) if best_idx is not None else 0.0
+
+        selection = "full"
+        masked_scores: np.ndarray | None = None
+
+        # Optional rerank for partial cues:
+        # 1) score on known dimensions only (invariant to global rotation)
+        # 2) take top-k by masked score
+        # 3) choose the best full-score among those candidates (uses recovered dims as tie-break)
+        if rerank_top_k and (mask is not None) and np.any(~known) and scores.size:
+            m = int(np.sum(known))
+            if m > 0:
+                cue_known = cue_ph[known]
+                masked_scores = np.abs(pats[:, known].conj() @ cue_known) / float(m)  # (K,)
+                k = int(min(max(int(rerank_top_k), 1), masked_scores.size))
+                # Indices of top-k masked scores (unordered).
+                cand = np.argpartition(masked_scores, -k)[-k:]
+                # Prefer best masked score; use full-score only as a tie-break.
+                best_m = float(np.max(masked_scores[cand]))
+                tie = cand[masked_scores[cand] >= (best_m - 1e-12)]
+                best_idx = int(tie[np.argmax(scores[tie])])
+                selection = "rerank(masked->full)"
+            else:
+                best_idx = int(np.argmax(scores)) if scores.size else None
+        else:
+            best_idx = int(np.argmax(scores)) if scores.size else None
+
+        best_full_score = float(scores[best_idx]) if best_idx is not None else 0.0
+        if best_idx is not None and selection.startswith("rerank") and masked_scores is not None:
+            best_score = float(masked_scores[best_idx])
+        else:
+            best_score = best_full_score
         best_label = self._labels[best_idx] if best_idx is not None else None
 
         snapped_state: np.ndarray | None = None
@@ -270,6 +364,8 @@ class PhaseAssociativeMemory:
             index=best_idx,
             score=best_score,
             scores=scores.astype(np.float64, copy=False),
+            masked_scores=None if masked_scores is None else masked_scores.astype(np.float64, copy=False),
+            selection=selection,
             final_state=final_state.astype(np.complex128, copy=False),
             snapped_state=snapped_state,
             steps_run=int(steps_run),
@@ -291,6 +387,9 @@ class PhaseAssociativeMemory:
             zero_diag=np.array([int(self.zero_diag)], dtype=np.int8),
             clamp_cue=np.array([int(self.clamp_cue)], dtype=np.int8),
             project_each_step=np.array([int(self.project_each_step)], dtype=np.int8),
+            projection_eps=np.array([self.projection_eps], dtype=np.float64),
+            project_interval=np.array([self.project_interval], dtype=np.int64),
+            clamp_alpha=np.array([(-1.0 if self.clamp_alpha is None else float(self.clamp_alpha))], dtype=np.float64),
             node_prefix=np.array([self.node_prefix], dtype=object),
         )
 
@@ -298,6 +397,12 @@ class PhaseAssociativeMemory:
     def load(cls, path: str) -> "PhaseAssociativeMemory":
         d = np.load(path, allow_pickle=True)
         num_units = int(np.asarray(d["num_units"]).reshape(-1)[0])
+        # Optional fields added later; fall back safely for old files.
+        projection_eps = float(np.asarray(d["projection_eps"]).reshape(-1)[0]) if "projection_eps" in d else 1e-12
+        project_interval = int(np.asarray(d["project_interval"]).reshape(-1)[0]) if "project_interval" in d else 1
+        clamp_alpha_raw = float(np.asarray(d["clamp_alpha"]).reshape(-1)[0]) if "clamp_alpha" in d else -1.0
+        clamp_alpha = None if clamp_alpha_raw < 0 else float(clamp_alpha_raw)
+
         mem = cls(
             num_units=num_units,
             coupling_strength=float(np.asarray(d["coupling_strength"]).reshape(-1)[0]),
@@ -305,6 +410,9 @@ class PhaseAssociativeMemory:
             zero_diag=bool(int(np.asarray(d["zero_diag"]).reshape(-1)[0])),
             clamp_cue=bool(int(np.asarray(d["clamp_cue"]).reshape(-1)[0])),
             project_each_step=bool(int(np.asarray(d["project_each_step"]).reshape(-1)[0])),
+            projection_eps=projection_eps,
+            project_interval=project_interval,
+            clamp_alpha=clamp_alpha,
             node_prefix=str(np.asarray(d["node_prefix"]).reshape(-1)[0]),
         )
         patterns = np.asarray(d["patterns"])

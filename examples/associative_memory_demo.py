@@ -34,6 +34,7 @@ def main() -> None:
     ap.add_argument("--target", type=int, default=-1, help="Target pattern index (0..K-1). -1 picks randomly.")
     ap.add_argument("--noise-std", type=float, default=0.65, help="Phase noise std dev in radians for noisy cue.")
     ap.add_argument("--known-frac", type=float, default=0.28, help="Fraction of units revealed for partial cue.")
+    ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables).")
     ap.add_argument("--steps", type=int, default=500, help="Max settling steps.")
     ap.add_argument("--dt", type=float, default=0.05, help="Time step for settling.")
     args = ap.parse_args()
@@ -92,6 +93,24 @@ def main() -> None:
     print("Partial cue")
     print("  known_frac:", float(np.mean(mask)))
     print("  recalled:", res2.label, f"(score={res2.score:.3f}, steps={res2.steps_run}, converged={res2.converged})")
+
+    # Rerank using only known units, then break ties with full score.
+    if int(args.rerank_top) > 0:
+        res2r = mem.recall(
+            cue_partial,
+            mask=mask,
+            steps=int(args.steps),
+            dt=float(args.dt),
+            snap=True,
+            rerank_top_k=int(args.rerank_top),
+        )
+        full_score = float(res2r.scores[res2r.index]) if res2r.index is not None else 0.0
+        masked_score = float(res2r.masked_scores[res2r.index]) if (res2r.index is not None and res2r.masked_scores is not None) else 0.0
+        print(
+            "  reranked:",
+            res2r.label,
+            f"(masked={masked_score:.3f}, full={full_score:.3f}, selection={res2r.selection})",
+        )
 
 
 if __name__ == "__main__":
