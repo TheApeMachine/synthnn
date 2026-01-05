@@ -78,7 +78,9 @@ class ResonantNode:
              self.damping = np.clip(self.damping, 0.0, 1.0)
 
     # --- Convenience views for legacy compatibility ---
-    
+    # NOTE: We attach `phase/amplitude/frequency` as properties *after* the
+    # dataclass is created to avoid interfering with InitVar fields.
+
     def get_amplitude(self) -> float:
         """Returns the absolute magnitude of the signal."""
         return abs(self.signal)
@@ -213,3 +215,21 @@ class ResonantNode:
     def __repr__(self) -> str:
         return (f"ResonantNode(id={self.node_id}, freq={self.get_frequency():.2f}Hz, "
                 f"amp={self.get_amplitude():.2f}, phase={self.get_phase():.2f}rad)") 
+
+
+# Attach legacy-compatible attribute views without breaking dataclass InitVars.
+def _node_amplitude(self: ResonantNode) -> float:
+    return self.get_amplitude()
+
+
+def _node_phase(self: ResonantNode) -> float:
+    return self.get_phase()
+
+
+def _node_frequency(self: ResonantNode) -> float:
+    return self.get_frequency()
+
+
+ResonantNode.amplitude = property(_node_amplitude)  # type: ignore[attr-defined]
+ResonantNode.phase = property(_node_phase)  # type: ignore[attr-defined]
+ResonantNode.frequency = property(_node_frequency)  # type: ignore[attr-defined]

@@ -44,9 +44,10 @@ from .composition_engine import (
     SectionStructure, CompositionStructure, VoiceLeading, MelodicGenerator
 )
 from .audio_cleanup import (
-    AudioCleanupEngine, ArtifactDetector, ResonanceFilter,
+    AudioCleanupEngine, ArtifactDetector,
     ArtifactType, ArtifactProfile, create_cleanup_pipeline
 )
+from .associative_memory import PhaseAssociativeMemory, RecallResult
 
 __all__ = [
     'ResonantNode',
@@ -102,10 +103,11 @@ __all__ = [
     'MelodicGenerator',
     'AudioCleanupEngine',
     'ArtifactDetector',
-    'ResonanceFilter',
     'ArtifactType',
     'ArtifactProfile',
-    'create_cleanup_pipeline'
+    'create_cleanup_pipeline',
+    'PhaseAssociativeMemory',
+    'RecallResult',
 ]
 
-__version__ = '0.1.0' 
+__version__ = '0.1.0'

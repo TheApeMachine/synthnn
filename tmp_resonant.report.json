@@ -1,0 +1,195 @@
+{
+  "artifacts": [
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.931678784469013,
+      "frequency_hz": 3744.6616541353383,
+      "frequency_range_hz": [
+        3686.766917293233,
+        3802.5563909774437
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9963232247459546,
+      "strength": 4.214032051739423
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9242812298333704,
+      "frequency_hz": 3748.872180451128,
+      "frequency_range_hz": [
+        3690.9774436090224,
+        3806.7669172932333
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9798842144445266,
+      "strength": 2.2143697040092576
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9106093359968316,
+      "frequency_hz": 3774.736842105263,
+      "frequency_range_hz": [
+        3716.8421052631575,
+        3832.6315789473683
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9495022281411073,
+      "strength": 1.406518687971823
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9072443608802897,
+      "frequency_hz": 1000.0,
+      "frequency_range_hz": [
+        942.1052631578948,
+        1057.8947368421052
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9420245056599031,
+      "strength": 0.6630661572889128
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9011076505233896,
+      "frequency_hz": 1000.0,
+      "frequency_range_hz": [
+        942.1052631578948,
+        1057.8947368421052
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9283873715334582,
+      "strength": 0.7832024349986451
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9008445601813367,
+      "frequency_hz": 4122.105263157895,
+      "frequency_range_hz": [
+        4064.2105263157896,
+        4180.0
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9278027263288964,
+      "strength": 0.44720355262264894
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9003640919865518,
+      "frequency_hz": 4006.315789473684,
+      "frequency_range_hz": [
+        3948.4210526315787,
+        4064.2105263157896
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9267350192293743,
+      "strength": 0.5762648651621003
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.8972017720068476,
+      "frequency_hz": 3667.3684210526317,
+      "frequency_range_hz": [
+        3609.4736842105262,
+        3725.263157894737
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9197076414966981,
+      "strength": 1.0306898425270001
+    }
+  ],
+  "config": {
+    "detector": {
+      "adaptive_refine": true,
+      "bandwidth_hz": 40.0,
+      "freq_range_hz": [
+        1000.0,
+        12000.0
+      ],
+      "inhibit_radius_hz": 120.0,
+      "inhibit_strength": 0.8,
+      "min_persistence": 0.6,
+      "min_phase_coherence": 0.4,
+      "num_nodes": 96,
+      "presence_db": 6.0,
+      "refine_range_hz": 120.0,
+      "refine_steps": 15,
+      "refine_top_k": 8
+    },
+    "method": {
+      "max_artifacts": 8,
+      "strength_multiplier": 1.6
+    }
+  },
+  "generated_at": "2026-01-05T09:14:43.701976+00:00",
+  "input": {
+    "duration_sec": 1.5,
+    "num_samples": 66150,
+    "path": "tmp_in.wav",
+    "sample_rate": 44100
+  },
+  "results": {
+    "methods": {
+      "selected_method": {
+        "metrics": {
+          "realtime_factor": 0.7274087158472246,
+          "runtime_sec": 2.062114416999975,
+          "spectral_flatness_after": 0.00010191816949794242,
+          "spectral_flatness_before": 1.6469126557640864e-09,
+          "spectral_flatness_change": 0.00010191652258528665,
+          "transient_env_corr": 0.055990037122583804,
+          "transient_env_energy_ratio": 96.09939916448222
+        },
+        "per_artifact": {
+          "1000.00": {
+            "bandpower_after": 0.003021954025237729,
+            "bandpower_before": 3.639210506902379e-14,
+            "reduction_db": -109.1928067518438
+          },
+          "3667.37": {
+            "bandpower_after": 0.00653348236050841,
+            "bandpower_before": 1.0070589767456461e-12,
+            "reduction_db": -98.1208981786598
+          },
+          "3744.66": {
+            "bandpower_after": 0.1340192067339943,
+            "bandpower_before": 0.0017996974109107608,
+            "reduction_db": -18.719675511272058
+          },
+          "3748.87": {
+            "bandpower_after": 0.13319084896715808,
+            "bandpower_before": 0.0017997002666394909,
+            "reduction_db": -18.692742061484594
+          },
+          "3774.74": {
+            "bandpower_after": 0.035381087296487874,
+            "bandpower_before": 1.379059338269294e-06,
+            "reduction_db": -44.09188221652478
+          },
+          "4006.32": {
+            "bandpower_after": 0.0009161045549455852,
+            "bandpower_before": 8.009536497731968e-14,
+            "reduction_db": -100.58337657783126
+          },
+          "4122.11": {
+            "bandpower_after": 0.0004030039027487758,
+            "bandpower_before": 2.0240922698376056e-14,
+            "reduction_db": -102.99078945658346
+          }
+        }
+      }
+    }
+  },
+  "schema_version": "cleanup_report_v1",
+  "summary": {
+    "cleanup_severity": 0.9091664732347038,
+    "num_artifacts": 8
+  }
+}

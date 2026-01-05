@@ -1,0 +1,145 @@
+{
+  "artifacts": [
+    {
+      "artifact_type": "whistling",
+      "confidence": 1.0,
+      "frequency_hz": 3746.77734375,
+      "frequency_range_hz": [
+        3740.77734375,
+        3752.77734375
+      ],
+      "multires_support": 3,
+      "persistence": 1.0,
+      "phase_coherence": 1.0,
+      "strength": 0.029889347031712532
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.93203779955705,
+      "frequency_hz": 1033.59375,
+      "frequency_range_hz": [
+        1027.59375,
+        1039.59375
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9971210360527039,
+      "strength": 4.608720246324083e-06
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9324935605128607,
+      "frequency_hz": 2863.916015625,
+      "frequency_range_hz": [
+        2857.916015625,
+        2869.916015625
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9981338381767273,
+      "strength": 2.343537062188261e-06
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9296558370192846,
+      "frequency_hz": 2885.44921875,
+      "frequency_range_hz": [
+        2879.44921875,
+        2891.44921875
+      ],
+      "multires_support": 1,
+      "persistence": 1.0,
+      "phase_coherence": 0.9918277859687805,
+      "strength": 2.2431772777053993e-06
+    },
+    {
+      "artifact_type": "whistling",
+      "confidence": 0.9656920591990152,
+      "frequency_hz": 4629.638671875,
+      "frequency_range_hz": [
+        4623.638671875,
+        4635.638671875
+      ],
+      "multires_support": 2,
+      "persistence": 1.0,
+      "phase_coherence": 0.9978342056274414,
+      "strength": 2.191735575252096e-06
+    }
+  ],
+  "config": {
+    "detector": {
+      "freq_range_hz": [
+        1000.0,
+        20000.0
+      ],
+      "min_persistence": 0.7,
+      "min_phase_coherence": 0.6,
+      "window_sizes": [
+        1024,
+        2048,
+        4096
+      ]
+    },
+    "method": {
+      "bandwidth_hz": 35.0,
+      "base_frequency": 440.0,
+      "max_artifacts": 5,
+      "mode": null,
+      "name": "resonant-subtraction"
+    }
+  },
+  "generated_at": "2026-01-05T08:25:21.835311+00:00",
+  "input": {
+    "duration_sec": 1.5,
+    "num_samples": 66150,
+    "path": "tmp_in.wav",
+    "sample_rate": 44100
+  },
+  "results": {
+    "methods": {
+      "selected_method": {
+        "metrics": {
+          "realtime_factor": 45.356044496274656,
+          "runtime_sec": 0.03307166699960362,
+          "spectral_flatness_after": 1.7969334851359809e-09,
+          "spectral_flatness_before": 1.6469126557640864e-09,
+          "spectral_flatness_change": 1.500208293718945e-10,
+          "transient_env_corr": 0.8153554698540827,
+          "transient_env_energy_ratio": 0.6366666940613677
+        },
+        "per_artifact": {
+          "1033.59": {
+            "bandpower_after": 3.1650690482409255e-14,
+            "bandpower_before": 3.164726006962957e-14,
+            "reduction_db": -0.0004707290929117382
+          },
+          "2863.92": {
+            "bandpower_after": 7.806556851341233e-11,
+            "bandpower_before": 1.1571333493469686e-11,
+            "reduction_db": -8.290761163921735
+          },
+          "2885.45": {
+            "bandpower_after": 4.97725662108847e-11,
+            "bandpower_before": 7.395004510151732e-12,
+            "reduction_db": -8.280515897927142
+          },
+          "3746.78": {
+            "bandpower_after": 0.0011506004074612365,
+            "bandpower_before": 0.0017996970834509576,
+            "reduction_db": 1.9427488936383703
+          },
+          "4629.64": {
+            "bandpower_after": 6.140270547831265e-12,
+            "bandpower_before": 9.59983208397107e-12,
+            "reduction_db": 1.940761295096073
+          }
+        }
+      }
+    }
+  },
+  "schema_version": "cleanup_report_v1",
+  "summary": {
+    "cleanup_severity": 0.951975851257642,
+    "num_artifacts": 5
+  }
+}

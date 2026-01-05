@@ -69,6 +69,7 @@ setup(
     entry_points={
         "console_scripts": [
             "synthnn-demo=synthnn.main:main",
+            "synthnn-clean=synthnn.cli.audio_cleanup:main",
         ],
     },
-) 
+)
