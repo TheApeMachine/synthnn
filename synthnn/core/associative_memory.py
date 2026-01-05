@@ -25,7 +25,7 @@ def _as_2d(x: np.ndarray) -> np.ndarray:
     return x
 
 
-def _to_phasors(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
+def _to_phasors(x: np.ndarray, *, eps: float = 1e-12, dtype: np.dtype = np.dtype(np.complex128)) -> np.ndarray:
     """
     Convert an array to unit phasors.
 
@@ -35,21 +35,25 @@ def _to_phasors(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
     x = np.asarray(x)
     if np.iscomplexobj(x):
         mag = np.abs(x)
-        out = np.empty_like(x, dtype=np.complex128)
+        out = np.empty_like(x, dtype=dtype)
         nz = mag > eps
-        out[nz] = x[nz] / mag[nz]
+        # Cast through the output dtype to avoid accidental upcasting.
+        out[nz] = (x[nz] / mag[nz]).astype(dtype, copy=False)
         out[~nz] = 1.0 + 0.0j
         return out
     # real -> angles
-    return np.exp(1j * x.astype(np.float64))
+    out = np.exp(1j * x.astype(np.float64))
+    return out.astype(dtype, copy=False)
 
 
 def _project_unit(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
     """Project complex vector to unit circle elementwise (zeros -> 1+0j)."""
+    x = np.asarray(x)
+    out_dtype = np.dtype(np.complex64) if x.dtype == np.complex64 else np.dtype(np.complex128)
     mag = np.abs(x)
-    out = np.empty_like(x, dtype=np.complex128)
+    out = np.empty_like(x, dtype=out_dtype)
     nz = mag > eps
-    out[nz] = x[nz] / mag[nz]
+    out[nz] = (x[nz] / mag[nz]).astype(out_dtype, copy=False)
     out[~nz] = 1.0 + 0.0j
     return out
 
@@ -60,10 +64,12 @@ def _project_unit_or_zero(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
 
     Any element with magnitude <= eps is left as 0+0j instead of being biased to 1+0j.
     """
+    x = np.asarray(x)
+    out_dtype = np.dtype(np.complex64) if x.dtype == np.complex64 else np.dtype(np.complex128)
     mag = np.abs(x)
-    out = np.zeros_like(x, dtype=np.complex128)
+    out = np.zeros_like(x, dtype=out_dtype)
     nz = mag > eps
-    out[nz] = x[nz] / mag[nz]
+    out[nz] = (x[nz] / mag[nz]).astype(out_dtype, copy=False)
     return out
 
 
@@ -110,6 +116,7 @@ class PhaseAssociativeMemory:
         self,
         num_units: int,
         *,
+        dtype: np.dtype = np.dtype(np.complex128),
         coupling_strength: float = 0.25,
         damping: float = 0.02,
         zero_diag: bool = True,
@@ -123,6 +130,10 @@ class PhaseAssociativeMemory:
         self.num_units: int = int(num_units)
         if self.num_units <= 0:
             raise ValueError("num_units must be > 0")
+
+        self.dtype: np.dtype = np.dtype(dtype)
+        if self.dtype not in (np.dtype(np.complex64), np.dtype(np.complex128)):
+            raise ValueError("dtype must be complex64 or complex128")
 
         self.coupling_strength: float = float(coupling_strength)
         self.damping: float = float(damping)
@@ -158,7 +169,7 @@ class PhaseAssociativeMemory:
         if pats.shape[1] != self.num_units:
             raise ValueError(f"patterns must have shape (K, {self.num_units})")
 
-        pats = _to_phasors(pats)
+        pats = _to_phasors(pats, dtype=self.dtype)
 
         K = int(pats.shape[0])
         if labels is None:
@@ -172,9 +183,9 @@ class PhaseAssociativeMemory:
         if self.zero_diag:
             np.fill_diagonal(w, 0.0 + 0.0j)
 
-        self._patterns = pats.astype(np.complex128, copy=False)
+        self._patterns = pats.astype(self.dtype, copy=False)
         self._labels = list(labels)
-        self._w = w.astype(np.complex128, copy=False)
+        self._w = w.astype(self.dtype, copy=False)
 
         # (Re)build the network substrate.
         self._network = self._build_network(w=self._w)
@@ -228,7 +239,9 @@ class PhaseAssociativeMemory:
         if cue_v.ndim != 1 or cue_v.shape[0] != self.num_units:
             raise ValueError(f"cue must have shape ({self.num_units},)")
 
-        cue_ph = _to_phasors(cue_v)
+        # Use the same dtype as stored patterns to avoid expensive upcasts in large-K scoring.
+        pat_dtype = self._patterns.dtype
+        cue_ph = _to_phasors(cue_v, dtype=pat_dtype)
 
         if mask is None:
             known = np.ones(self.num_units, dtype=bool)
@@ -242,20 +255,16 @@ class PhaseAssociativeMemory:
             if not self.clamp_cue:
                 return
             alpha = self.clamp_alpha
-            for i in range(self.num_units):
-                if not known[i]:
-                    continue
-                if alpha is None or alpha >= 1.0:
-                    # Hard clamp: hold exactly at the cue (Dirichlet-like boundary).
-                    state[i] = complex(cue_ph[i])
-                else:
-                    # Soft clamp: blend current state toward cue.
-                    s = state[i]
-                    state[i] = (1.0 - alpha) * s + alpha * complex(cue_ph[i])
+            if alpha is None or alpha >= 1.0:
+                # Hard clamp: hold exactly at the cue (Dirichlet-like boundary).
+                state[known] = cue_ph[known]
+            else:
+                # Soft clamp: blend current state toward cue.
+                state[known] = (1.0 - alpha) * state[known] + alpha * cue_ph[known]
 
         # Initialize state from cue; unknown units start at 0 (no direction).
-        state = np.zeros(self.num_units, dtype=np.complex128)
-        state[known] = cue_ph[known].astype(np.complex128, copy=False)
+        state = np.zeros(self.num_units, dtype=pat_dtype)
+        state[known] = cue_ph[known].astype(pat_dtype, copy=False)
         _apply_clamp(state)
 
         prev_state = _project_unit_or_zero(state, eps=self.projection_eps)
@@ -268,6 +277,17 @@ class PhaseAssociativeMemory:
             if self._w is None:
                 raise RuntimeError("Internal weight matrix missing. Call store() first.")
             W = self._w  # (N, N), complex
+            # Keep scalar math in the same float precision as the complex state to avoid upcasting.
+            if state.dtype == np.complex64:
+                coupling_strength = np.float32(self.coupling_strength)
+                damping = np.float32(self.damping)
+                dt_s = np.float32(dt)
+                one = np.float32(1.0)
+            else:
+                coupling_strength = float(self.coupling_strength)
+                damping = float(self.damping)
+                dt_s = float(dt)
+                one = 1.0
 
         for t in range(steps):
             # Apply constraints before stepping (so couplings see the constrained boundary).
@@ -276,10 +296,10 @@ class PhaseAssociativeMemory:
             if use_vectorized_dynamics:
                 # Vectorized substrate dynamics (equivalent to freq=0 network with complex weights).
                 # coupling already includes coupling_strength (matches ResonantNetwork.compute_coupling).
-                coupling = self.coupling_strength * (W @ state)
+                coupling = coupling_strength * (W @ state)
                 state = state + coupling
                 # global damping in ResonantNetwork.step uses damping_override=self.global_damping
-                state = state * (1.0 - self.damping * float(dt))
+                state = state * (one - damping * dt_s)
             else:
                 # Fallback to ResonantNetwork substrate (slower).
                 for i in range(self.num_units):
@@ -318,8 +338,13 @@ class PhaseAssociativeMemory:
         # Normalize by number of *active* units in final_state to avoid penalizing unresolved zeros.
         pats = self._patterns  # (K, N)
         active = np.abs(final_state) > self.projection_eps
-        denom = float(np.sum(active)) if np.any(active) else float(self.num_units)
-        scores = np.abs(pats[:, active].conj() @ final_state[active]) / denom  # (K,)
+        denom_raw = float(np.sum(active)) if np.any(active) else float(self.num_units)
+        denom = np.float32(denom_raw) if pats.dtype == np.complex64 else denom_raw
+        # IMPORTANT for performance: avoid `pats[:, active]` (copy) and `pats.conj()` (copy).
+        # We compute row-wise dot products via `pats @ conj(v)`; magnitude is invariant to conjugation.
+        v_full = np.where(active, final_state, 0.0 + 0.0j).astype(final_state.dtype, copy=False)
+        dots_full = pats @ np.conj(v_full)  # (K,)
+        scores = np.abs(dots_full) / denom  # (K,)
 
         selection = "full"
         masked_scores: np.ndarray | None = None
@@ -331,7 +356,16 @@ class PhaseAssociativeMemory:
         if rerank_top_k and (mask is not None) and np.any(~known) and scores.size:
             m = int(np.sum(known))
             if m > 0:
-                masked_scores = np.abs(pats[:, known].conj() @ final_state[known]) / float(m)  # (K,)
+                # Compute masked scores without copying a (K,m) submatrix.
+                # Accumulate dot products over known indices only.
+                state_conj = np.conj(final_state)
+                masked_dots = np.zeros(pats.shape[0], dtype=pats.dtype)
+                tmp = np.empty_like(masked_dots)
+                for idx in np.flatnonzero(known):
+                    np.multiply(pats[:, idx], state_conj[idx], out=tmp)
+                    np.add(masked_dots, tmp, out=masked_dots)
+                m_denom = np.float32(m) if pats.dtype == np.complex64 else float(m)
+                masked_scores = np.abs(masked_dots) / m_denom  # (K,)
                 k = int(min(max(int(rerank_top_k), 1), masked_scores.size))
                 # Indices of top-k masked scores (unordered).
                 cand = np.argpartition(masked_scores, -k)[-k:]
@@ -359,8 +393,8 @@ class PhaseAssociativeMemory:
             label=best_label,
             index=best_idx,
             score=best_score,
-            scores=scores.astype(np.float64, copy=False),
-            masked_scores=None if masked_scores is None else masked_scores.astype(np.float64, copy=False),
+            scores=scores,
+            masked_scores=masked_scores,
             selection=selection,
             final_state=final_state.astype(np.complex128, copy=False),
             snapped_state=snapped_state,
@@ -375,9 +409,9 @@ class PhaseAssociativeMemory:
         np.savez_compressed(
             path,
             num_units=np.array([self.num_units], dtype=np.int64),
-            patterns=self._patterns.astype(np.complex128),
+            patterns=self._patterns,
             labels=np.array(self._labels, dtype=object),
-            W=self._w.astype(np.complex128),
+            W=self._w,
             coupling_strength=np.array([self.coupling_strength], dtype=np.float64),
             damping=np.array([self.damping], dtype=np.float64),
             zero_diag=np.array([int(self.zero_diag)], dtype=np.int8),
@@ -399,8 +433,10 @@ class PhaseAssociativeMemory:
         clamp_alpha_raw = float(np.asarray(d["clamp_alpha"]).reshape(-1)[0]) if "clamp_alpha" in d else -1.0
         clamp_alpha = None if clamp_alpha_raw < 0 else float(clamp_alpha_raw)
 
+        patterns = np.asarray(d["patterns"])
         mem = cls(
             num_units=num_units,
+            dtype=patterns.dtype,
             coupling_strength=float(np.asarray(d["coupling_strength"]).reshape(-1)[0]),
             damping=float(np.asarray(d["damping"]).reshape(-1)[0]),
             zero_diag=bool(int(np.asarray(d["zero_diag"]).reshape(-1)[0])),
@@ -411,7 +447,6 @@ class PhaseAssociativeMemory:
             clamp_alpha=clamp_alpha,
             node_prefix=str(np.asarray(d["node_prefix"]).reshape(-1)[0]),
         )
-        patterns = np.asarray(d["patterns"])
         labels = [str(x) for x in np.asarray(d["labels"]).tolist()]
         mem.store(patterns, labels=labels)
         return mem

@@ -29,6 +29,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Phase associative memory demo (random target + controllable difficulty).")
     ap.add_argument("--seed", type=int, default=123, help="RNG seed for patterns and corruption.")
     ap.add_argument("--units", type=int, default=64, help="Number of memory units (N).")
+    ap.add_argument("--dtype", type=str, default="c128", choices=["c64", "c128"], help="Internal complex dtype. c64 is faster/less memory for huge K.")
     ap.add_argument("--patterns", type=int, default=5, help="Number of stored patterns (K). (Alias: --targets)")
     ap.add_argument("--targets", type=int, default=None, help="Alias for --patterns (number of possible targets).")
     ap.add_argument("--target", type=int, default=-1, help="Target pattern index (0..K-1). -1 picks randomly.")
@@ -46,8 +47,10 @@ def main() -> None:
     patterns = _random_patterns(rng, K, N)
     labels = [f"pattern_{i}" for i in range(K)]
 
+    dtype = np.complex64 if args.dtype == "c64" else np.complex128
     mem = PhaseAssociativeMemory(
         N,
+        dtype=dtype,
         coupling_strength=0.35,
         damping=0.02,
         zero_diag=True,
