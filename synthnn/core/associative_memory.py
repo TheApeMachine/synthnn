@@ -109,6 +109,7 @@ class PhaseAssociativeMemory:
         num_units: int,
         *,
         dtype: np.dtype = _C128,
+        label_prefix: str | None = None,
         coupling_strength: float = 0.25,
         damping: float = 0.02,
         zero_diag: bool = True,
@@ -148,6 +149,7 @@ class PhaseAssociativeMemory:
             # Soft clamp weight (0..1]. Using 1.0 reproduces a hard override.
             self.clamp_alpha = float(np.clip(self.clamp_alpha, 0.0, 1.0))
         self.node_prefix: str = str(node_prefix)
+        self.label_prefix: str | None = None if label_prefix is None else str(label_prefix)
 
         self._patterns: np.ndarray | None = None  # (K, N), complex
         self._labels: list[str] | None = None
@@ -163,6 +165,15 @@ class PhaseAssociativeMemory:
     def labels(self) -> list[str] | None:
         return None if self._labels is None else list(self._labels)
 
+    def label_of(self, index: int | None) -> str | None:
+        if index is None:
+            return None
+        if self._labels is not None:
+            return self._labels[int(index)]
+        if self.label_prefix is None:
+            return None
+        return f"{self.label_prefix}{int(index)}"
+
     def store(self, patterns: np.ndarray, labels: list[str] | None = None) -> None:
         pats = _as_2d(patterns)
         if pats.shape[1] != self.num_units:
@@ -171,9 +182,7 @@ class PhaseAssociativeMemory:
         pats = _to_phasors(pats, dtype=self.dtype)
 
         K = int(pats.shape[0])
-        if labels is None:
-            labels = [f"p{i}" for i in range(K)]
-        if len(labels) != K:
+        if labels is not None and len(labels) != K:
             raise ValueError("labels length must match number of patterns")
 
         # Complex Hebbian / holographic rule:
@@ -183,7 +192,7 @@ class PhaseAssociativeMemory:
             np.fill_diagonal(w, 0.0 + 0.0j)
 
         self._patterns = pats.astype(self.dtype, copy=False)
-        self._labels = list(labels)
+        self._labels = None if labels is None else list(labels)
         self._w = w.astype(self.dtype, copy=False)
 
         # (Re)build the network substrate.
@@ -228,7 +237,7 @@ class PhaseAssociativeMemory:
         tol: float = 1e-3,
         patience: int = 8,
     ) -> RecallResult:
-        if self._patterns is None or self._labels is None or self._w is None or self._network is None:
+        if self._patterns is None or self._w is None or self._network is None:
             raise RuntimeError("No patterns stored. Call store() first.")
 
         steps = int(steps)
@@ -273,25 +282,24 @@ class PhaseAssociativeMemory:
         converged = False
         last_delta = float("inf")
 
-        W = self._w  # (N, N), complex
-        assert W is not None
-        # Keep scalar math in the same float precision as the complex state to avoid upcasting.
-        if state.dtype == _C64:
-            coupling_strength = np.float32(self.coupling_strength)
-            damping = np.float32(self.damping)
-            dt_s = np.float32(dt)
-            one = np.float32(1.0)
-        else:
-            coupling_strength = float(self.coupling_strength)
-            damping = float(self.damping)
-            dt_s = float(dt)
-            one = 1.0
-
         for t in range(steps):
             # Apply constraints before stepping (so couplings see the constrained boundary).
             _apply_clamp(state)
 
             if use_vectorized_dynamics:
+                W = self._w  # (N, N), complex
+                assert W is not None
+                # Keep scalar math in the same float precision as the complex state to avoid upcasting.
+                if state.dtype == _C64:
+                    coupling_strength = np.float32(self.coupling_strength)
+                    damping = np.float32(self.damping)
+                    dt_s = np.float32(dt)
+                    one = np.float32(1.0)
+                else:
+                    coupling_strength = float(self.coupling_strength)
+                    damping = float(self.damping)
+                    dt_s = float(dt)
+                    one = 1.0
                 # Vectorized substrate dynamics (equivalent to freq=0 network with complex weights).
                 # coupling already includes coupling_strength (matches ResonantNetwork.compute_coupling).
                 coupling = coupling_strength * (W @ state)
@@ -344,8 +352,9 @@ class PhaseAssociativeMemory:
         denom = np.float32(denom_raw) if pats.dtype == _C64 else denom_raw
         # IMPORTANT for performance: avoid `pats[:, active]` (copy) and `pats.conj()` (copy).
         # We compute row-wise dot products via `pats @ conj(v)`; magnitude is invariant to conjugation.
-        zero = np.zeros((), dtype=pat_dtype)[()]
-        v_full = np.where(active, final_state, zero)
+        # Avoid np.where scalar gymnastics; explicit copy is clearer and often faster.
+        v_full = final_state.copy()
+        v_full[~active] = pat_dtype.type(0.0 + 0.0j)
         dots_full = pats @ np.conj(v_full)  # (K,)
         scores = np.abs(dots_full) / denom  # (K,)
 
@@ -360,7 +369,8 @@ class PhaseAssociativeMemory:
             m = int(np.sum(known))
             if m > 0:
                 # Compute masked scores in one BLAS matvec (no (K,m) slice, no Python loop).
-                v_known = np.where(known, final_state, zero)
+                v_known = final_state.copy()
+                v_known[~known] = pat_dtype.type(0.0 + 0.0j)
                 masked_dots = pats @ np.conj(v_known)  # (K,)
                 m_denom = np.float32(m) if pats.dtype == _C64 else float(m)
                 masked_scores = np.abs(masked_dots) / m_denom  # (K,)
@@ -379,20 +389,17 @@ class PhaseAssociativeMemory:
             best_idx = int(np.argmax(scores)) if scores.size else None
 
         best_score = float(masked_scores[best_idx]) if (best_idx is not None and selection.startswith("rerank") and masked_scores is not None) else (float(scores[best_idx]) if best_idx is not None else 0.0)
-        best_label = self._labels[best_idx] if best_idx is not None else None
+        best_label = self.label_of(best_idx)
 
         snapped_state: np.ndarray | None = None
         if snap and best_idx is not None:
             # Align global phase so snapped pattern is closest to final_state.
             ph = np.vdot(pats[best_idx], final_state)  # conj(p)·final
-            rot: complex
             if ph != 0:
                 theta = np.angle(ph)
                 if pat_dtype == _C64:
                     theta = np.float32(theta)
-                    rot = np.complex64(np.cos(theta) + np.complex64(1j) * np.sin(theta))
-                else:
-                    rot = np.cos(theta) + 1j * np.sin(theta)
+                rot = np.exp(1j * theta).astype(pat_dtype, copy=False)
             else:
                 rot = pat_dtype.type(1.0 + 0.0j)
             snapped_state = (pats[best_idx] * rot).astype(pat_dtype, copy=False)

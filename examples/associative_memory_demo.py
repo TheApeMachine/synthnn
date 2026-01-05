@@ -39,6 +39,7 @@ class Args:
     rerank_top: int = 64
     steps: int = 500
     dt: float = 0.05
+    no_labels: bool = False
 
 
 def main() -> None:
@@ -60,6 +61,11 @@ def main() -> None:
     _ = ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables). Uses settled-state masking, not raw cue.")
     _ = ap.add_argument("--steps", type=int, default=500, help="Max settling steps.")
     _ = ap.add_argument("--dt", type=float, default=0.05, help="Time step for settling.")
+    _ = ap.add_argument(
+        "--no-labels",
+        action="store_true",
+        help="Do not materialize K Python strings for labels (important for large K).",
+    )
     args: Args = ap.parse_args(namespace=Args())
 
     rng = np.random.default_rng(args.seed)
@@ -67,12 +73,13 @@ def main() -> None:
     N = args.units
     K = args.targets if args.targets is not None else args.patterns
     patterns: np.ndarray = _random_patterns(rng, K, N)
-    labels = [f"pattern_{i}" for i in range(K)]
+    labels = None if args.no_labels else [f"pattern_{i}" for i in range(K)]
 
     dtype = np.dtype(np.complex64) if args.dtype == "c64" else np.dtype(np.complex128)
     mem = PhaseAssociativeMemory(
         N,
         dtype=dtype,
+        label_prefix="pattern_" if labels is None else None,  # lazy labels if not provided
         coupling_strength=0.35,
         damping=0.02,
         zero_diag=True,
@@ -95,14 +102,15 @@ def main() -> None:
 
     base: np.ndarray = patterns[target]
 
-    if K <= 20:
-        print("Stored labels:", labels)
-    else:
-        head = labels[:10]
-        tail = labels[-3:]
-        print(f"Stored labels: K={K} (showing first 10 + last 3)")
-        print(" ", head, "...", tail)
-    print("Target label:", labels[target])
+    if labels is not None:
+        if K <= 20:
+            print("Stored labels:", labels)
+        else:
+            head = labels[:10]
+            tail = labels[-3:]
+            print(f"Stored labels: K={K} (showing first 10 + last 3)")
+            print(" ", head, "...", tail)
+    print("Target label:", mem.label_of(target))
     print()
 
     # --- Noisy cue ---
