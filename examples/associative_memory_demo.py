@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sys
 import argparse
+from dataclasses import dataclass
 import numpy as np
 
 # Allow running from repo root without installation
@@ -25,29 +26,50 @@ def _random_patterns(rng: np.random.Generator, k: int, n: int) -> np.ndarray:
     return np.exp(1j * angles)
 
 
+@dataclass
+class Args:
+    seed: int = 123
+    units: int = 64
+    dtype: str = "c128"  # "c64" | "c128"
+    patterns: int = 5
+    targets: int | None = None
+    target: int = -1
+    noise_std: float = 0.65
+    known_frac: float = 0.28
+    rerank_top: int = 64
+    steps: int = 500
+    dt: float = 0.05
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Phase associative memory demo (random target + controllable difficulty).")
-    ap.add_argument("--seed", type=int, default=123, help="RNG seed for patterns and corruption.")
-    ap.add_argument("--units", type=int, default=64, help="Number of memory units (N).")
-    ap.add_argument("--dtype", type=str, default="c128", choices=["c64", "c128"], help="Internal complex dtype. c64 is faster/less memory for huge K.")
-    ap.add_argument("--patterns", type=int, default=5, help="Number of stored patterns (K). (Alias: --targets)")
-    ap.add_argument("--targets", type=int, default=None, help="Alias for --patterns (number of possible targets).")
-    ap.add_argument("--target", type=int, default=-1, help="Target pattern index (0..K-1). -1 picks randomly.")
-    ap.add_argument("--noise-std", type=float, default=0.65, help="Phase noise std dev in radians for noisy cue.")
-    ap.add_argument("--known-frac", type=float, default=0.28, help="Fraction of units revealed for partial cue.")
-    ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables). Uses settled-state masking, not raw cue.")
-    ap.add_argument("--steps", type=int, default=500, help="Max settling steps.")
-    ap.add_argument("--dt", type=float, default=0.05, help="Time step for settling.")
-    args = ap.parse_args()
+    _ = ap.add_argument("--seed", type=int, default=123, help="RNG seed for patterns and corruption.")
+    _ = ap.add_argument("--units", type=int, default=64, help="Number of memory units (N).")
+    _ = ap.add_argument(
+        "--dtype",
+        type=str,
+        default="c128",
+        choices=["c64", "c128"],
+        help="Internal complex dtype. c64 is faster/less memory, but exact recall scoring is still O(K*N) and patterns must fit in RAM.",
+    )
+    _ = ap.add_argument("--patterns", type=int, default=5, help="Number of stored patterns (K). (Alias: --targets)")
+    _ = ap.add_argument("--targets", type=int, default=None, help="Alias for --patterns (number of possible targets).")
+    _ = ap.add_argument("--target", type=int, default=-1, help="Target pattern index (0..K-1). -1 picks randomly.")
+    _ = ap.add_argument("--noise-std", type=float, default=0.65, help="Phase noise std dev in radians for noisy cue.")
+    _ = ap.add_argument("--known-frac", type=float, default=0.28, help="Fraction of units revealed for partial cue.")
+    _ = ap.add_argument("--rerank-top", type=int, default=64, help="Top-k candidates for partial-cue rerank (0 disables). Uses settled-state masking, not raw cue.")
+    _ = ap.add_argument("--steps", type=int, default=500, help="Max settling steps.")
+    _ = ap.add_argument("--dt", type=float, default=0.05, help="Time step for settling.")
+    args: Args = ap.parse_args(namespace=Args())
 
-    rng = np.random.default_rng(int(args.seed))
+    rng = np.random.default_rng(args.seed)
 
-    N = int(args.units)
-    K = int(args.targets) if args.targets is not None else int(args.patterns)
-    patterns = _random_patterns(rng, K, N)
+    N = args.units
+    K = args.targets if args.targets is not None else args.patterns
+    patterns: np.ndarray = _random_patterns(rng, K, N)
     labels = [f"pattern_{i}" for i in range(K)]
 
-    dtype = np.complex64 if args.dtype == "c64" else np.complex128
+    dtype = np.dtype(np.complex64) if args.dtype == "c64" else np.dtype(np.complex128)
     mem = PhaseAssociativeMemory(
         N,
         dtype=dtype,
@@ -59,14 +81,19 @@ def main() -> None:
     )
     mem.store(patterns, labels=labels)
 
-    if int(args.target) < 0:
-        target = int(rng.integers(0, K))
+    if K >= 100_000:
+        print("NOTE: Large K detected. This demo stores all patterns in RAM and recall scoring is O(K*N).")
+        print("      For million-scale K, you'll likely need memmapped storage and/or approximate candidate selection.")
+        print()
+
+    if args.target < 0:
+        target = int(rng.integers(0, int(K)))
     else:
         target = int(args.target)
         if not (0 <= target < K):
             raise SystemExit(f"--target must be in [0, {K-1}] (or -1 for random)")
 
-    base = patterns[target]
+    base: np.ndarray = patterns[target]
 
     if K <= 20:
         print("Stored labels:", labels)
@@ -80,7 +107,7 @@ def main() -> None:
 
     # --- Noisy cue ---
     noise_std = float(args.noise_std)  # radians
-    cue_noisy = np.exp(1j * (np.angle(base) + rng.normal(0.0, noise_std, size=N)))
+    cue_noisy: np.ndarray = np.exp(1j * (np.angle(base) + rng.normal(0.0, noise_std, size=N)))
     res1 = mem.recall(cue_noisy, steps=int(args.steps), dt=float(args.dt), snap=True)
     print("Noisy cue")
     print("  noise_std(rad):", noise_std)
@@ -90,7 +117,7 @@ def main() -> None:
     # --- Partial cue ---
     known_frac = float(args.known_frac)
     mask = rng.random(N) < known_frac
-    cue_partial = base.copy()
+    cue_partial: np.ndarray = base.copy()
     cue_partial[~mask] = 1.0 + 0.0j
     res2 = mem.recall(cue_partial, mask=mask, steps=int(args.steps), dt=float(args.dt), snap=True)
     print("Partial cue")

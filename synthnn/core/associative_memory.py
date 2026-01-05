@@ -16,6 +16,10 @@ from .resonant_network import ResonantNetwork
 from .resonant_node import ResonantNode
 
 
+_C64 = np.dtype(np.complex64)
+_C128 = np.dtype(np.complex128)
+
+
 def _as_2d(x: np.ndarray) -> np.ndarray:
     x = np.asarray(x)
     if x.ndim == 1:
@@ -25,7 +29,7 @@ def _as_2d(x: np.ndarray) -> np.ndarray:
     return x
 
 
-def _to_phasors(x: np.ndarray, *, eps: float = 1e-12, dtype: np.dtype = np.dtype(np.complex128)) -> np.ndarray:
+def _to_phasors(x: np.ndarray, *, eps: float = 1e-12, dtype: np.dtype = _C128) -> np.ndarray:
     """
     Convert an array to unit phasors.
 
@@ -46,18 +50,6 @@ def _to_phasors(x: np.ndarray, *, eps: float = 1e-12, dtype: np.dtype = np.dtype
     return out.astype(dtype, copy=False)
 
 
-def _project_unit(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
-    """Project complex vector to unit circle elementwise (zeros -> 1+0j)."""
-    x = np.asarray(x)
-    out_dtype = np.dtype(np.complex64) if x.dtype == np.complex64 else np.dtype(np.complex128)
-    mag = np.abs(x)
-    out = np.empty_like(x, dtype=out_dtype)
-    nz = mag > eps
-    out[nz] = (x[nz] / mag[nz]).astype(out_dtype, copy=False)
-    out[~nz] = 1.0 + 0.0j
-    return out
-
-
 def _project_unit_or_zero(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
     """
     Project complex vector to unit circle elementwise, but preserve true unknowns.
@@ -65,7 +57,7 @@ def _project_unit_or_zero(x: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
     Any element with magnitude <= eps is left as 0+0j instead of being biased to 1+0j.
     """
     x = np.asarray(x)
-    out_dtype = np.dtype(np.complex64) if x.dtype == np.complex64 else np.dtype(np.complex128)
+    out_dtype = _C64 if x.dtype == _C64 else _C128
     mag = np.abs(x)
     out = np.zeros_like(x, dtype=out_dtype)
     nz = mag > eps
@@ -116,13 +108,13 @@ class PhaseAssociativeMemory:
         self,
         num_units: int,
         *,
-        dtype: np.dtype = np.dtype(np.complex128),
+        dtype: np.dtype = _C128,
         coupling_strength: float = 0.25,
         damping: float = 0.02,
         zero_diag: bool = True,
         clamp_cue: bool = True,
         project_each_step: bool = True,
-        projection_eps: float = 1e-12,
+        projection_eps: float | None = None,
         project_interval: int = 1,
         clamp_alpha: float | None = None,
         node_prefix: str = "mem_",
@@ -132,7 +124,7 @@ class PhaseAssociativeMemory:
             raise ValueError("num_units must be > 0")
 
         self.dtype: np.dtype = np.dtype(dtype)
-        if self.dtype not in (np.dtype(np.complex64), np.dtype(np.complex128)):
+        if self.dtype not in (_C64, _C128):
             raise ValueError("dtype must be complex64 or complex128")
 
         self.coupling_strength: float = float(coupling_strength)
@@ -140,7 +132,14 @@ class PhaseAssociativeMemory:
         self.zero_diag: bool = bool(zero_diag)
         self.clamp_cue: bool = bool(clamp_cue)
         self.project_each_step: bool = bool(project_each_step)
-        self.projection_eps: float = float(projection_eps)
+        # Default eps should match the float precision of the complex dtype.
+        # For complex64, eps=1e-12 is below practical resolution and can cause
+        # "active"/"valid" masks to behave oddly due to float32 noise.
+        self.projection_eps: float
+        if projection_eps is None:
+            self.projection_eps = 1e-7 if self.dtype == _C64 else 1e-12
+        else:
+            self.projection_eps = float(projection_eps)
         self.project_interval: int = int(project_interval)
         if self.project_interval < 1:
             self.project_interval = 1
@@ -208,7 +207,8 @@ class PhaseAssociativeMemory:
             for i in range(self.num_units):
                 if self.zero_diag and i == j:
                     continue
-                wij = w[i, j]  # note: coupling sums over inputs (src -> tgt), so weight maps j->i
+                # note: coupling sums over inputs (src -> tgt), so weight maps j->i
+                wij = complex(w[i, j])
                 if wij == 0:
                     continue
                 net.connect(src, self._node_id(i), weight=wij, delay=0.0)
@@ -273,21 +273,19 @@ class PhaseAssociativeMemory:
         converged = False
         last_delta = float("inf")
 
-        if use_vectorized_dynamics:
-            if self._w is None:
-                raise RuntimeError("Internal weight matrix missing. Call store() first.")
-            W = self._w  # (N, N), complex
-            # Keep scalar math in the same float precision as the complex state to avoid upcasting.
-            if state.dtype == np.complex64:
-                coupling_strength = np.float32(self.coupling_strength)
-                damping = np.float32(self.damping)
-                dt_s = np.float32(dt)
-                one = np.float32(1.0)
-            else:
-                coupling_strength = float(self.coupling_strength)
-                damping = float(self.damping)
-                dt_s = float(dt)
-                one = 1.0
+        W = self._w  # (N, N), complex
+        assert W is not None
+        # Keep scalar math in the same float precision as the complex state to avoid upcasting.
+        if state.dtype == _C64:
+            coupling_strength = np.float32(self.coupling_strength)
+            damping = np.float32(self.damping)
+            dt_s = np.float32(dt)
+            one = np.float32(1.0)
+        else:
+            coupling_strength = float(self.coupling_strength)
+            damping = float(self.damping)
+            dt_s = float(dt)
+            one = 1.0
 
         for t in range(steps):
             # Apply constraints before stepping (so couplings see the constrained boundary).
@@ -306,7 +304,11 @@ class PhaseAssociativeMemory:
                     nid = self._node_id(i)
                     self._network.nodes[nid].signal = complex(state[i])
                 self._network.step(float(dt))
-                state = np.array([self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)], dtype=np.complex128)
+                # Respect the configured dtype so non-vectorized mode doesn't defeat dtype control.
+                state = np.array(
+                    [self._network.nodes[self._node_id(i)].signal for i in range(self.num_units)],
+                    dtype=pat_dtype,
+                )
 
             if self.project_each_step and (t % self.project_interval) == 0:
                 state = _project_unit_or_zero(state, eps=self.projection_eps)
@@ -339,10 +341,11 @@ class PhaseAssociativeMemory:
         pats = self._patterns  # (K, N)
         active = np.abs(final_state) > self.projection_eps
         denom_raw = float(np.sum(active)) if np.any(active) else float(self.num_units)
-        denom = np.float32(denom_raw) if pats.dtype == np.complex64 else denom_raw
+        denom = np.float32(denom_raw) if pats.dtype == _C64 else denom_raw
         # IMPORTANT for performance: avoid `pats[:, active]` (copy) and `pats.conj()` (copy).
         # We compute row-wise dot products via `pats @ conj(v)`; magnitude is invariant to conjugation.
-        v_full = np.where(active, final_state, 0.0 + 0.0j).astype(final_state.dtype, copy=False)
+        zero = np.zeros((), dtype=pat_dtype)[()]
+        v_full = np.where(active, final_state, zero)
         dots_full = pats @ np.conj(v_full)  # (K,)
         scores = np.abs(dots_full) / denom  # (K,)
 
@@ -356,22 +359,18 @@ class PhaseAssociativeMemory:
         if rerank_top_k and (mask is not None) and np.any(~known) and scores.size:
             m = int(np.sum(known))
             if m > 0:
-                # Compute masked scores without copying a (K,m) submatrix.
-                # Accumulate dot products over known indices only.
-                state_conj = np.conj(final_state)
-                masked_dots = np.zeros(pats.shape[0], dtype=pats.dtype)
-                tmp = np.empty_like(masked_dots)
-                for idx in np.flatnonzero(known):
-                    np.multiply(pats[:, idx], state_conj[idx], out=tmp)
-                    np.add(masked_dots, tmp, out=masked_dots)
-                m_denom = np.float32(m) if pats.dtype == np.complex64 else float(m)
+                # Compute masked scores in one BLAS matvec (no (K,m) slice, no Python loop).
+                v_known = np.where(known, final_state, zero)
+                masked_dots = pats @ np.conj(v_known)  # (K,)
+                m_denom = np.float32(m) if pats.dtype == _C64 else float(m)
                 masked_scores = np.abs(masked_dots) / m_denom  # (K,)
                 k = int(min(max(int(rerank_top_k), 1), masked_scores.size))
                 # Indices of top-k masked scores (unordered).
                 cand = np.argpartition(masked_scores, -k)[-k:]
                 # Prefer best masked score; use full-score only as a tie-break.
                 best_m = float(np.max(masked_scores[cand]))
-                tie = cand[masked_scores[cand] >= (best_m - 1e-12)]
+                tie_tol = 1e-6 if pats.dtype == _C64 else 1e-12
+                tie = cand[masked_scores[cand] >= (best_m - tie_tol)]
                 best_idx = int(tie[np.argmax(scores[tie])])
                 selection = "rerank(masked_final->full)"
             else:
@@ -386,8 +385,17 @@ class PhaseAssociativeMemory:
         if snap and best_idx is not None:
             # Align global phase so snapped pattern is closest to final_state.
             ph = np.vdot(pats[best_idx], final_state)  # conj(p)·final
-            rot = np.exp(1j * np.angle(ph)) if ph != 0 else (1.0 + 0.0j)
-            snapped_state = (pats[best_idx] * rot).astype(np.complex128, copy=False)
+            rot: complex
+            if ph != 0:
+                theta = np.angle(ph)
+                if pat_dtype == _C64:
+                    theta = np.float32(theta)
+                    rot = np.complex64(np.cos(theta) + np.complex64(1j) * np.sin(theta))
+                else:
+                    rot = np.cos(theta) + 1j * np.sin(theta)
+            else:
+                rot = pat_dtype.type(1.0 + 0.0j)
+            snapped_state = (pats[best_idx] * rot).astype(pat_dtype, copy=False)
 
         return RecallResult(
             label=best_label,
@@ -396,7 +404,7 @@ class PhaseAssociativeMemory:
             scores=scores,
             masked_scores=masked_scores,
             selection=selection,
-            final_state=final_state.astype(np.complex128, copy=False),
+            final_state=final_state,
             snapped_state=snapped_state,
             steps_run=int(steps_run),
             converged=bool(converged),
@@ -427,13 +435,16 @@ class PhaseAssociativeMemory:
     def load(cls, path: str) -> "PhaseAssociativeMemory":
         d = np.load(path, allow_pickle=True)
         num_units = int(np.asarray(d["num_units"]).reshape(-1)[0])
+        patterns = np.asarray(d["patterns"])
         # Optional fields added later; fall back safely for old files.
-        projection_eps = float(np.asarray(d["projection_eps"]).reshape(-1)[0]) if "projection_eps" in d else 1e-12
+        if "projection_eps" in d:
+            projection_eps = float(np.asarray(d["projection_eps"]).reshape(-1)[0])
+        else:
+            projection_eps = 1e-7 if patterns.dtype == _C64 else 1e-12
         project_interval = int(np.asarray(d["project_interval"]).reshape(-1)[0]) if "project_interval" in d else 1
         clamp_alpha_raw = float(np.asarray(d["clamp_alpha"]).reshape(-1)[0]) if "clamp_alpha" in d else -1.0
         clamp_alpha = None if clamp_alpha_raw < 0 else float(clamp_alpha_raw)
 
-        patterns = np.asarray(d["patterns"])
         mem = cls(
             num_units=num_units,
             dtype=patterns.dtype,
